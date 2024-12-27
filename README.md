@@ -61,8 +61,24 @@ The server provides a demonstration prompt:
 ### Prerequisites
 
 You'll need a HubSpot access token. You can obtain this by:
-1. Creating a private app in your HubSpot account
-2. Or through OAuth2 authentication
+1. Creating a private app in your HubSpot account:
+   Follow the [HubSpot Private Apps Guide](https://developers.hubspot.com/docs/guides/apps/private-apps/overview)
+   - Go to your HubSpot account settings
+   - Navigate to Integrations > Private Apps
+   - Click "Create private app"
+   - Fill in the basic information:
+     - Name your app
+     - Add description
+     - Upload logo (optional)
+   - Define required scopes:
+     - crm.objects.contacts.read
+     - crm.objects.contacts.write
+     - crm.objects.companies.read
+     - crm.objects.companies.write
+   - Review and create the app
+   - Copy the generated access token
+
+Note: Keep your access token secure and never commit it to version control.
 
 ### Option 1: Local Installation
 
