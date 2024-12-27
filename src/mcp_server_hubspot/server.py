@@ -11,7 +11,7 @@ from mcp.server import NotificationOptions, Server
 import mcp.server.stdio
 from pydantic import AnyUrl
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil.tz import tzlocal
 
 logger = logging.getLogger('mcp_hubspot_server')
@@ -63,6 +63,119 @@ class HubSpotClient:
         except Exception as e:
             return json.dumps({"error": str(e)})
 
+    def get_company_activity(self, company_id: str) -> str:
+        """Get activity history for a specific company"""
+        try:
+            # Step 1: Get all engagement IDs associated with the company using CRM Associations v4 API
+            associated_engagements = self.client.crm.associations.v4.basic_api.get_page(
+                object_type="companies",
+                object_id=company_id,
+                to_object_type="engagements",
+                limit=500
+            )
+            
+            # Extract engagement IDs from the associations response
+            engagement_ids = []
+            if hasattr(associated_engagements, 'results'):
+                for result in associated_engagements.results:
+                    engagement_ids.append(result.to_object_id)
+
+            # Step 2: Get detailed information for each engagement
+            activities = []
+            for engagement_id in engagement_ids:
+                engagement_response = self.client.api_request({
+                    "method": "GET",
+                    "path": f"/engagements/v1/engagements/{engagement_id}"
+                }).json()
+                
+                engagement_data = engagement_response.get('engagement', {})
+                metadata = engagement_response.get('metadata', {})
+                
+                # Format the engagement
+                formatted_engagement = {
+                    "id": engagement_data.get("id"),
+                    "type": engagement_data.get("type"),
+                    "created_at": engagement_data.get("createdAt"),
+                    "last_updated": engagement_data.get("lastUpdated"),
+                    "created_by": engagement_data.get("createdBy"),
+                    "modified_by": engagement_data.get("modifiedBy"),
+                    "timestamp": engagement_data.get("timestamp"),
+                    "associations": engagement_response.get("associations", {})
+                }
+                
+                # Add type-specific metadata formatting
+                if engagement_data.get("type") == "NOTE":
+                    formatted_engagement["content"] = metadata.get("body", "")
+                elif engagement_data.get("type") == "EMAIL":
+                    formatted_engagement["content"] = {
+                        "subject": metadata.get("subject", ""),
+                        "from": {
+                            "raw": metadata.get("from", {}).get("raw", ""),
+                            "email": metadata.get("from", {}).get("email", ""),
+                            "firstName": metadata.get("from", {}).get("firstName", ""),
+                            "lastName": metadata.get("from", {}).get("lastName", "")
+                        },
+                        "to": [{
+                            "raw": recipient.get("raw", ""),
+                            "email": recipient.get("email", ""),
+                            "firstName": recipient.get("firstName", ""),
+                            "lastName": recipient.get("lastName", "")
+                        } for recipient in metadata.get("to", [])],
+                        "cc": [{
+                            "raw": recipient.get("raw", ""),
+                            "email": recipient.get("email", ""),
+                            "firstName": recipient.get("firstName", ""),
+                            "lastName": recipient.get("lastName", "")
+                        } for recipient in metadata.get("cc", [])],
+                        "bcc": [{
+                            "raw": recipient.get("raw", ""),
+                            "email": recipient.get("email", ""),
+                            "firstName": recipient.get("firstName", ""),
+                            "lastName": recipient.get("lastName", "")
+                        } for recipient in metadata.get("bcc", [])],
+                        "sender": {
+                            "email": metadata.get("sender", {}).get("email", "")
+                        },
+                        "body": metadata.get("text", "") or metadata.get("html", "")
+                    }
+                elif engagement_data.get("type") == "TASK":
+                    formatted_engagement["content"] = {
+                        "subject": metadata.get("subject", ""),
+                        "body": metadata.get("body", ""),
+                        "status": metadata.get("status", ""),
+                        "for_object_type": metadata.get("forObjectType", "")
+                    }
+                elif engagement_data.get("type") == "MEETING":
+                    formatted_engagement["content"] = {
+                        "title": metadata.get("title", ""),
+                        "body": metadata.get("body", ""),
+                        "start_time": metadata.get("startTime"),
+                        "end_time": metadata.get("endTime"),
+                        "internal_notes": metadata.get("internalMeetingNotes", "")
+                    }
+                elif engagement_data.get("type") == "CALL":
+                    formatted_engagement["content"] = {
+                        "body": metadata.get("body", ""),
+                        "from_number": metadata.get("fromNumber", ""),
+                        "to_number": metadata.get("toNumber", ""),
+                        "duration_ms": metadata.get("durationMilliseconds"),
+                        "status": metadata.get("status", ""),
+                        "disposition": metadata.get("disposition", "")
+                    }
+                
+                activities.append(formatted_engagement)
+
+            # Convert any datetime fields and return
+            converted_activities = convert_datetime_fields(activities)
+            return json.dumps(converted_activities)
+            
+        except ApiException as e:
+            logger.error(f"API Exception: {str(e)}")
+            return json.dumps({"error": str(e)})
+        except Exception as e:
+            logger.error(f"Exception: {str(e)}")
+            return json.dumps({"error": str(e)})
+
 async def main(access_token: Optional[str] = None):
     """Run the HubSpot MCP server."""
     logger.info("Server starting")
@@ -89,10 +202,6 @@ async def main(access_token: Optional[str] = None):
     @server.read_resource()
     async def handle_read_resource(uri: AnyUrl) -> str:
         if uri.scheme != "hubspot":
-            await server.request_context.session.send_log_message(
-                level="error",
-                data=f"Unsupported URI scheme: {uri.scheme}",
-            )
             raise ValueError(f"Unsupported URI scheme: {uri.scheme}")
 
         path = str(uri).replace("hubspot://", "")
@@ -101,10 +210,6 @@ async def main(access_token: Optional[str] = None):
         elif path == "companies":
             return str(hubspot.get_companies())
         else:
-            await server.request_context.session.send_log_message(
-                level="error",
-                data=f"Unknown resource path: {path}",
-            )
             raise ValueError(f"Unknown resource path: {path}")
 
     @server.list_tools()
@@ -154,6 +259,17 @@ async def main(access_token: Optional[str] = None):
                     "required": ["name", "domain"]
                 },
             ),
+            types.Tool(
+                name="get_company_activity",
+                description="Get activity history for a specific company",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "company_id": {"type": "string", "description": "HubSpot company ID"}
+                    },
+                    "required": ["company_id"]
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -190,6 +306,12 @@ async def main(access_token: Optional[str] = None):
                     properties=arguments.get("properties")
                 )
                 return [types.TextContent(type="text", text=str(results))]
+
+            elif name == "get_company_activity":
+                if not arguments:
+                    raise ValueError("Missing arguments for get_company_activity")
+                results = hubspot.get_company_activity(arguments["company_id"])
+                return [types.TextContent(type="text", text=results)]
 
             else:
                 raise ValueError(f"Unknown tool: {name}")
