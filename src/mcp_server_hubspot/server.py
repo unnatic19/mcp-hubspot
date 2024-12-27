@@ -176,6 +176,129 @@ class HubSpotClient:
             logger.error(f"Exception: {str(e)}")
             return json.dumps({"error": str(e)})
 
+    def get_recent_activities(self) -> str:
+        """Get recent activities from HubSpot for the last 3 days"""
+        try:
+            # Calculate timestamp for 3 days ago
+            three_days_ago = int((datetime.now() - timedelta(days=3)).timestamp() * 1000)
+            
+            activities = []
+            offset = None
+            
+            while True:
+                # Prepare request parameters
+                params = {
+                    "count": 100,  # Get maximum allowed per request
+                    "since": three_days_ago
+                }
+                if offset:
+                    params["offset"] = offset
+                
+                # Get recent modified engagements
+                response = self.client.api_request({
+                    "method": "GET",
+                    "path": "/engagements/v1/engagements/recent/modified",
+                    "params": params
+                }).json()
+                
+                # Process results
+                if 'results' in response:
+                    for result in response['results']:
+                        engagement_data = result.get('engagement', {})
+                        metadata = result.get('metadata', {})
+                        
+                        # Format the engagement
+                        formatted_engagement = {
+                            "id": engagement_data.get("id"),
+                            "type": engagement_data.get("type"),
+                            "created_at": engagement_data.get("createdAt"),
+                            "last_updated": engagement_data.get("lastUpdated"),
+                            "created_by": engagement_data.get("createdBy"),
+                            "modified_by": engagement_data.get("modifiedBy"),
+                            "timestamp": engagement_data.get("timestamp"),
+                            "associations": result.get("associations", {})
+                        }
+                        
+                        # Add type-specific metadata formatting
+                        if engagement_data.get("type") == "NOTE":
+                            formatted_engagement["content"] = metadata.get("body", "")
+                        elif engagement_data.get("type") == "EMAIL":
+                            formatted_engagement["content"] = {
+                                "subject": metadata.get("subject", ""),
+                                "from": {
+                                    "raw": metadata.get("from", {}).get("raw", ""),
+                                    "email": metadata.get("from", {}).get("email", ""),
+                                    "firstName": metadata.get("from", {}).get("firstName", ""),
+                                    "lastName": metadata.get("from", {}).get("lastName", "")
+                                },
+                                "to": [{
+                                    "raw": recipient.get("raw", ""),
+                                    "email": recipient.get("email", ""),
+                                    "firstName": recipient.get("firstName", ""),
+                                    "lastName": recipient.get("lastName", "")
+                                } for recipient in metadata.get("to", [])],
+                                "cc": [{
+                                    "raw": recipient.get("raw", ""),
+                                    "email": recipient.get("email", ""),
+                                    "firstName": recipient.get("firstName", ""),
+                                    "lastName": recipient.get("lastName", "")
+                                } for recipient in metadata.get("cc", [])],
+                                "bcc": [{
+                                    "raw": recipient.get("raw", ""),
+                                    "email": recipient.get("email", ""),
+                                    "firstName": recipient.get("firstName", ""),
+                                    "lastName": recipient.get("lastName", "")
+                                } for recipient in metadata.get("bcc", [])],
+                                "sender": {
+                                    "email": metadata.get("sender", {}).get("email", "")
+                                },
+                                "body": metadata.get("text", "") or metadata.get("html", "")
+                            }
+                        elif engagement_data.get("type") == "TASK":
+                            formatted_engagement["content"] = {
+                                "subject": metadata.get("subject", ""),
+                                "body": metadata.get("body", ""),
+                                "status": metadata.get("status", ""),
+                                "for_object_type": metadata.get("forObjectType", "")
+                            }
+                        elif engagement_data.get("type") == "MEETING":
+                            formatted_engagement["content"] = {
+                                "title": metadata.get("title", ""),
+                                "body": metadata.get("body", ""),
+                                "start_time": metadata.get("startTime"),
+                                "end_time": metadata.get("endTime"),
+                                "internal_notes": metadata.get("internalMeetingNotes", "")
+                            }
+                        elif engagement_data.get("type") == "CALL":
+                            formatted_engagement["content"] = {
+                                "body": metadata.get("body", ""),
+                                "from_number": metadata.get("fromNumber", ""),
+                                "to_number": metadata.get("toNumber", ""),
+                                "duration_ms": metadata.get("durationMilliseconds"),
+                                "status": metadata.get("status", ""),
+                                "disposition": metadata.get("disposition", "")
+                            }
+                        
+                        activities.append(formatted_engagement)
+                
+                # Check if there are more results to fetch
+                if not response.get('hasMore', False):
+                    break
+                    
+                # Get next page offset
+                offset = response.get('offset')
+            
+            # Convert any datetime fields and return
+            converted_activities = convert_datetime_fields(activities)
+            return json.dumps(converted_activities)
+            
+        except ApiException as e:
+            logger.error(f"API Exception: {str(e)}")
+            return json.dumps({"error": str(e)})
+        except Exception as e:
+            logger.error(f"Exception: {str(e)}")
+            return json.dumps({"error": str(e)})
+
 async def main(access_token: Optional[str] = None):
     """Run the HubSpot MCP server."""
     logger.info("Server starting")
@@ -186,15 +309,21 @@ async def main(access_token: Optional[str] = None):
     async def handle_list_resources() -> list[types.Resource]:
         return [
             types.Resource(
-                uri=AnyUrl("hubspot://contacts"),
+                uri=AnyUrl("hubspot://hubspot_contacts"),
                 name="HubSpot Contacts",
                 description="List of HubSpot contacts",
                 mimeType="application/json",
             ),
             types.Resource(
-                uri=AnyUrl("hubspot://companies"),
+                uri=AnyUrl("hubspot://hubspot_companies"),
                 name="HubSpot Companies", 
                 description="List of HubSpot companies",
+                mimeType="application/json",
+            ),
+            types.Resource(
+                uri=AnyUrl("hubspot://hubspot_recent_engagements"),
+                name="HubSpot Recent Engagements",
+                description="HubSpot engagements from all companies and contacts from the last 3 days",
                 mimeType="application/json",
             )
         ]
@@ -205,10 +334,12 @@ async def main(access_token: Optional[str] = None):
             raise ValueError(f"Unsupported URI scheme: {uri.scheme}")
 
         path = str(uri).replace("hubspot://", "")
-        if path == "contacts":
+        if path == "hubspot_contacts":
             return str(hubspot.get_contacts())
-        elif path == "companies":
+        elif path == "hubspot_companies":
             return str(hubspot.get_companies())
+        elif path == "hubspot_recent_engagements":
+            return str(hubspot.get_recent_activities())
         else:
             raise ValueError(f"Unknown resource path: {path}")
 
@@ -217,7 +348,7 @@ async def main(access_token: Optional[str] = None):
         """List available tools"""
         return [
             types.Tool(
-                name="get_contacts",
+                name="hubspot_get_contacts",
                 description="Get contacts from HubSpot",
                 inputSchema={
                     "type": "object",
@@ -225,7 +356,7 @@ async def main(access_token: Optional[str] = None):
                 },
             ),
             types.Tool(
-                name="create_contact",
+                name="hubspot_create_contact",
                 description="Create a new contact in HubSpot",
                 inputSchema={
                     "type": "object",
@@ -239,7 +370,7 @@ async def main(access_token: Optional[str] = None):
                 },
             ),
             types.Tool(
-                name="get_companies",
+                name="hubspot_get_companies",
                 description="Get companies from HubSpot",
                 inputSchema={
                     "type": "object",
@@ -247,7 +378,7 @@ async def main(access_token: Optional[str] = None):
                 },
             ),
             types.Tool(
-                name="create_company",
+                name="hubspot_create_company",
                 description="Create a new company in HubSpot",
                 inputSchema={
                     "type": "object",
@@ -260,7 +391,7 @@ async def main(access_token: Optional[str] = None):
                 },
             ),
             types.Tool(
-                name="get_company_activity",
+                name="hubspot_get_company_activity",
                 description="Get activity history for a specific company",
                 inputSchema={
                     "type": "object",
@@ -268,6 +399,14 @@ async def main(access_token: Optional[str] = None):
                         "company_id": {"type": "string", "description": "HubSpot company ID"}
                     },
                     "required": ["company_id"]
+                },
+            ),
+            types.Tool(
+                name="hubspot_get_recent_engagements",
+                description="Get HubSpot engagements from all companies and contacts from the last 3 days",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
                 },
             ),
         ]
@@ -278,11 +417,11 @@ async def main(access_token: Optional[str] = None):
     ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
         """Handle tool execution requests"""
         try:
-            if name == "get_contacts":
+            if name == "hubspot_get_contacts":
                 results = hubspot.get_contacts()
                 return [types.TextContent(type="text", text=str(results))]
 
-            elif name == "create_contact":
+            elif name == "hubspot_create_contact":
                 if not arguments:
                     raise ValueError("Missing arguments for create_contact")
                 results = hubspot.create_contact(
@@ -293,11 +432,11 @@ async def main(access_token: Optional[str] = None):
                 )
                 return [types.TextContent(type="text", text=str(results))]
 
-            elif name == "get_companies":
+            elif name == "hubspot_get_companies":
                 results = hubspot.get_companies()
                 return [types.TextContent(type="text", text=str(results))]
 
-            elif name == "create_company":
+            elif name == "hubspot_create_company":
                 if not arguments:
                     raise ValueError("Missing arguments for create_company")
                 results = hubspot.create_company(
@@ -307,11 +446,15 @@ async def main(access_token: Optional[str] = None):
                 )
                 return [types.TextContent(type="text", text=str(results))]
 
-            elif name == "get_company_activity":
+            elif name == "hubspot_get_company_activity":
                 if not arguments:
                     raise ValueError("Missing arguments for get_company_activity")
                 results = hubspot.get_company_activity(arguments["company_id"])
                 return [types.TextContent(type="text", text=results)]
+
+            elif name == "hubspot_get_recent_engagements":
+                results = hubspot.get_recent_activities()
+                return [types.TextContent(type="text", text=str(results))]
 
             else:
                 raise ValueError(f"Unknown tool: {name}")

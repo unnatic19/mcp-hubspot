@@ -14,8 +14,9 @@ For more information about the Model Context Protocol and how it works, see [Ant
 
 The server exposes the following resources:
 
-* `hubspot://contacts`: A dynamic resource that provides access to HubSpot contacts
-* `hubspot://companies`: A dynamic resource that provides access to HubSpot companies
+* `hubspot://hubspot_contacts`: A dynamic resource that provides access to HubSpot contacts
+* `hubspot://hubspot_companies`: A dynamic resource that provides access to HubSpot companies
+* `hubspot://hubspot_recent_engagements`: A dynamic resource that provides access to HubSpot engagements from the last 3 days
 
 All resources auto-update as their respective objects are modified in HubSpot.
 
@@ -24,12 +25,12 @@ All resources auto-update as their respective objects are modified in HubSpot.
 The server offers several tools for managing HubSpot objects:
 
 #### Contact Management Tools
-* `get_contacts`
+* `hubspot_get_contacts`
   * Retrieve contacts from HubSpot
   * No input required
   * Returns: Array of contact objects
 
-* `create_contact`
+* `hubspot_create_contact`
   * Create a new contact in HubSpot
   * Input:
     * `email` (string): Contact's email address
@@ -38,17 +39,29 @@ The server offers several tools for managing HubSpot objects:
     * `properties` (dict, optional): Additional contact properties
 
 #### Company Management Tools
-* `get_companies`
+* `hubspot_get_companies`
   * Retrieve companies from HubSpot
   * No input required
   * Returns: Array of company objects
 
-* `create_company`
+* `hubspot_create_company`
   * Create a new company in HubSpot
   * Input:
     * `name` (string): Company name
     * `domain` (string): Company domain
     * `properties` (dict, optional): Additional company properties
+
+* `hubspot_get_company_activity`
+  * Get activity history for a specific company
+  * Input:
+    * `company_id` (string): HubSpot company ID
+  * Returns: Array of activity objects
+
+#### Engagement Tools
+* `hubspot_get_recent_engagements`
+  * Get HubSpot engagements from all companies and contacts from the last 3 days
+  * No input required
+  * Returns: Array of engagement objects with full metadata
 
 ### Prompts
 
