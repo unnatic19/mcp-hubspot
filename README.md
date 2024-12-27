@@ -106,16 +106,23 @@ Note: Keep your access token secure and never commit it to version control.
 
 ### Docker Installation
 
-1. Build the Docker image:
+You can either build the image locally or pull it from Docker Hub:
+
+#### Option 1: Pull from Docker Hub
+```bash
+docker pull buryhuang/mcp-hubspot:latest
+```
+
+#### Option 2: Build Locally
 ```bash
 docker build -t mcp-hubspot .
 ```
 
-2. Run the container:
+Run the container:
 ```bash
 docker run \
   -e HUBSPOT_ACCESS_TOKEN=your_access_token_here \
-  mcp-hubspot
+  buryhuang/mcp-hubspot:latest
 ```
 
 ## Usage with Claude Desktop
@@ -132,7 +139,7 @@ docker run \
         "--rm",
         "-e",
         "HUBSPOT_ACCESS_TOKEN=your_access_token_here",
-        "mcp-hubspot"
+        "buryhuang/mcp-hubspot:latest"
       ]
     }
   }
