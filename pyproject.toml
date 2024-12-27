@@ -1,0 +1,17 @@
+[project]
+name = "mcp-server-hubspot"
+version = "0.1.0"
+description = "A simple Hubspot MCP server"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["mcp>=1.0.0", "hubspot-api-client>=8.1.0", "python-dotenv>=1.0.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = ["pyright>=1.1.389"]
+
+[project.scripts]
+mcp-server-hubspot = "mcp_server_hubspot:main" 
