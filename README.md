@@ -4,6 +4,8 @@
 
 A Model Context Protocol (MCP) server implementation that provides integration with HubSpot CRM. This server enables AI models to interact with HubSpot data and operations through a standardized interface.
 
+For more information about the Model Context Protocol and how it works, see [Anthropic's MCP documentation](https://www.anthropic.com/news/model-context-protocol).
+
 ## Components
 
 ### Resources
@@ -80,25 +82,7 @@ You'll need a HubSpot access token. You can obtain this by:
 
 Note: Keep your access token secure and never commit it to version control.
 
-### Option 1: Local Installation
-
-1. Install the package:
-```bash
-pip install mcp-server-hubspot
-```
-
-2. Set up environment variables:
-Create a `.env` file with:
-```
-HUBSPOT_ACCESS_TOKEN=your_access_token_here
-```
-
-3. Run the server:
-```bash
-mcp-server-hubspot
-```
-
-### Option 2: Docker Installation
+### Docker Installation
 
 1. Build the Docker image:
 ```bash
