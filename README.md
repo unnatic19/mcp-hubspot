@@ -6,6 +6,8 @@ A Model Context Protocol (MCP) server implementation that provides integration w
 
 For more information about the Model Context Protocol and how it works, see [Anthropic's MCP documentation](https://www.anthropic.com/news/model-context-protocol).
 
+<a href="https://glama.ai/mcp/servers/vpoifk4jai"><img width="380" height="200" src="https://glama.ai/mcp/servers/vpoifk4jai/badge" alt="HubSpot Server MCP server" /></a>
+
 ## Components
 
 ### Resources
