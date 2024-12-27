@@ -10,8 +10,25 @@ import mcp.types as types
 from mcp.server import NotificationOptions, Server
 import mcp.server.stdio
 from pydantic import AnyUrl
+import json
+from datetime import datetime
+from dateutil.tz import tzlocal
 
 logger = logging.getLogger('mcp_hubspot_server')
+
+def convert_datetime_fields(obj: Any) -> Any:
+    """Convert any datetime or tzlocal objects to string in the given object"""
+    if isinstance(obj, dict):
+        return {k: convert_datetime_fields(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_datetime_fields(item) for item in obj]
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, tzlocal):
+        # Get the current timezone offset
+        offset = datetime.now(tzlocal()).strftime('%z')
+        return f"UTC{offset[:3]}:{offset[3:]}"  # Format like "UTC+08:00" or "UTC-05:00"
+    return obj
 
 class HubSpotClient:
     def __init__(self, access_token: Optional[str] = None):
@@ -22,53 +39,29 @@ class HubSpotClient:
         
         self.client = HubSpot(access_token=access_token)
 
-    def get_contacts(self) -> List[Dict[str, Any]]:
+    def get_contacts(self) -> str:
         """Get all contacts from HubSpot"""
         try:
             contacts = self.client.crm.contacts.get_all()
-            return [contact.to_dict() for contact in contacts]
+            contacts_dict = [contact.to_dict() for contact in contacts]
+            converted_contacts = convert_datetime_fields(contacts_dict)
+            return json.dumps(converted_contacts)
         except ApiException as e:
-            raise Exception(f"Exception when requesting contacts: {str(e)}")
+            return json.dumps({"error": str(e)})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
 
-    def create_contact(self, email: str, firstname: str, lastname: str, properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Create a new contact in HubSpot"""
-        try:
-            properties = properties or {}
-            properties.update({
-                "email": email,
-                "firstname": firstname,
-                "lastname": lastname
-            })
-            simple_public_object_input = SimplePublicObjectInputForCreate(
-                properties=properties
-            )
-            response = self.client.crm.contacts.basic_api.create(
-                simple_public_object_input_for_create=simple_public_object_input
-            )
-            return response.to_dict()
-        except ApiException as e:
-            raise Exception(f"Exception when creating contact: {str(e)}")
-
-    def get_companies(self) -> List[Dict[str, Any]]:
+    def get_companies(self) -> str:
         """Get all companies from HubSpot"""
         try:
             companies = self.client.crm.companies.get_all()
-            return [company.to_dict() for company in companies]
+            companies_dict = [company.to_dict() for company in companies]
+            converted_companies = convert_datetime_fields(companies_dict)
+            return json.dumps(converted_companies)
         except ApiException as e:
-            raise Exception(f"Exception when requesting companies: {str(e)}")
-
-    def create_company(self, name: str, domain: str, properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Create a new company in HubSpot"""
-        try:
-            properties = properties or {}
-            properties.update({
-                "name": name,
-                "domain": domain
-            })
-            response = self.client.crm.companies.basic_api.create(properties=properties)
-            return response.to_dict()
+            return json.dumps({"error": str(e)})
         except Exception as e:
-            raise Exception(f"Failed to create company: {str(e)}")
+            return json.dumps({"error": str(e)})
 
 async def main(access_token: Optional[str] = None):
     """Run the HubSpot MCP server."""
