@@ -361,12 +361,12 @@ async def main(access_token: Optional[str] = None):
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "email": {"type": "string", "description": "Contact's email address"},
                         "firstname": {"type": "string", "description": "Contact's first name"},
                         "lastname": {"type": "string", "description": "Contact's last name"},
+                        "email": {"type": "string", "description": "Contact's email address"},
                         "properties": {"type": "object", "description": "Additional contact properties"}
                     },
-                    "required": ["email", "firstname", "lastname"]
+                    "required": ["firstname", "lastname"]
                 },
             ),
             types.Tool(
@@ -384,10 +384,9 @@ async def main(access_token: Optional[str] = None):
                     "type": "object",
                     "properties": {
                         "name": {"type": "string", "description": "Company name"},
-                        "domain": {"type": "string", "description": "Company domain"},
                         "properties": {"type": "object", "description": "Additional company properties"}
                     },
-                    "required": ["name", "domain"]
+                    "required": ["name"]
                 },
             ),
             types.Tool(
@@ -424,13 +423,79 @@ async def main(access_token: Optional[str] = None):
             elif name == "hubspot_create_contact":
                 if not arguments:
                     raise ValueError("Missing arguments for create_contact")
-                results = hubspot.create_contact(
-                    email=arguments["email"],
-                    firstname=arguments["firstname"],
-                    lastname=arguments["lastname"],
-                    properties=arguments.get("properties")
-                )
-                return [types.TextContent(type="text", text=str(results))]
+                
+                firstname = arguments["firstname"]
+                lastname = arguments["lastname"]
+                company = arguments.get("properties", {}).get("company")
+                
+                # Search for existing contacts with same name and company
+                try:
+                    from hubspot.crm.contacts import PublicObjectSearchRequest
+                    
+                    filter_groups = [{
+                        "filters": [
+                            {
+                                "propertyName": "firstname",
+                                "operator": "EQ",
+                                "value": firstname
+                            },
+                            {
+                                "propertyName": "lastname",
+                                "operator": "EQ",
+                                "value": lastname
+                            }
+                        ]
+                    }]
+                    
+                    # Add company filter if provided
+                    if company:
+                        filter_groups[0]["filters"].append({
+                            "propertyName": "company",
+                            "operator": "EQ",
+                            "value": company
+                        })
+                    
+                    search_request = PublicObjectSearchRequest(
+                        filter_groups=filter_groups
+                    )
+                    
+                    search_response = hubspot.client.crm.contacts.search_api.do_search(
+                        public_object_search_request=search_request
+                    )
+                    
+                    if search_response.total > 0:
+                        # Contact already exists
+                        return [types.TextContent(
+                            type="text", 
+                            text=f"Contact already exists: {search_response.results[0].to_dict()}"
+                        )]
+                    
+                    # If no existing contact found, proceed with creation
+                    properties = {
+                        "firstname": firstname,
+                        "lastname": lastname
+                    }
+                    
+                    # Add email if provided
+                    if "email" in arguments:
+                        properties["email"] = arguments["email"]
+                    
+                    # Add any additional properties
+                    if "properties" in arguments:
+                        properties.update(arguments["properties"])
+                    
+                    # Create contact using SimplePublicObjectInputForCreate
+                    simple_public_object_input = SimplePublicObjectInputForCreate(
+                        properties=properties
+                    )
+                    
+                    api_response = hubspot.client.crm.contacts.basic_api.create(
+                        simple_public_object_input_for_create=simple_public_object_input
+                    )
+                    return [types.TextContent(type="text", text=str(api_response.to_dict()))]
+                    
+                except ApiException as e:
+                    return [types.TextContent(type="text", text=f"HubSpot API error: {str(e)}")]
 
             elif name == "hubspot_get_companies":
                 results = hubspot.get_companies()
@@ -439,12 +504,57 @@ async def main(access_token: Optional[str] = None):
             elif name == "hubspot_create_company":
                 if not arguments:
                     raise ValueError("Missing arguments for create_company")
-                results = hubspot.create_company(
-                    name=arguments["name"],
-                    domain=arguments["domain"],
-                    properties=arguments.get("properties")
-                )
-                return [types.TextContent(type="text", text=str(results))]
+                
+                company_name = arguments["name"]
+                
+                # Search for existing companies with same name
+                try:
+                    from hubspot.crm.companies import PublicObjectSearchRequest
+                    
+                    search_request = PublicObjectSearchRequest(
+                        filter_groups=[{
+                            "filters": [
+                                {
+                                    "propertyName": "name",
+                                    "operator": "EQ",
+                                    "value": company_name
+                                }
+                            ]
+                        }]
+                    )
+                    
+                    search_response = hubspot.client.crm.companies.search_api.do_search(
+                        public_object_search_request=search_request
+                    )
+                    
+                    if search_response.total > 0:
+                        # Company already exists
+                        return [types.TextContent(
+                            type="text", 
+                            text=f"Company already exists: {search_response.results[0].to_dict()}"
+                        )]
+                    
+                    # If no existing company found, proceed with creation
+                    properties = {
+                        "name": company_name
+                    }
+                    
+                    # Add any additional properties
+                    if "properties" in arguments:
+                        properties.update(arguments["properties"])
+                    
+                    # Create company using SimplePublicObjectInputForCreate
+                    simple_public_object_input = SimplePublicObjectInputForCreate(
+                        properties=properties
+                    )
+                    
+                    api_response = hubspot.client.crm.companies.basic_api.create(
+                        simple_public_object_input_for_create=simple_public_object_input
+                    )
+                    return [types.TextContent(type="text", text=str(api_response.to_dict()))]
+                    
+                except ApiException as e:
+                    return [types.TextContent(type="text", text=f"HubSpot API error: {str(e)}")]
 
             elif name == "hubspot_get_company_activity":
                 if not arguments:

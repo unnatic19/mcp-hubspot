@@ -31,12 +31,18 @@ The server offers several tools for managing HubSpot objects:
   * Returns: Array of contact objects
 
 * `hubspot_create_contact`
-  * Create a new contact in HubSpot
+  * Create a new contact in HubSpot (checks for duplicates before creation)
   * Input:
-    * `email` (string): Contact's email address
     * `firstname` (string): Contact's first name
     * `lastname` (string): Contact's last name
+    * `email` (string, optional): Contact's email address
     * `properties` (dict, optional): Additional contact properties
+      * Example: `{"phone": "123456789", "company": "HubSpot"}`
+  * Behavior:
+    * Checks for existing contacts with the same first name and last name
+    * If `company` is provided in properties, also checks for matches with the same company
+    * Returns existing contact details if a match is found
+    * Creates new contact only if no match is found
 
 #### Company Management Tools
 * `hubspot_get_companies`
@@ -45,11 +51,15 @@ The server offers several tools for managing HubSpot objects:
   * Returns: Array of company objects
 
 * `hubspot_create_company`
-  * Create a new company in HubSpot
+  * Create a new company in HubSpot (checks for duplicates before creation)
   * Input:
     * `name` (string): Company name
-    * `domain` (string): Company domain
     * `properties` (dict, optional): Additional company properties
+      * Example: `{"domain": "example.com", "industry": "Technology"}`
+  * Behavior:
+    * Checks for existing companies with the same name
+    * Returns existing company details if a match is found
+    * Creates new company only if no match is found
 
 * `hubspot_get_company_activity`
   * Get activity history for a specific company
