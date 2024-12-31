@@ -106,7 +106,12 @@ Note: Keep your access token secure and never commit it to version control.
 
 ### Docker Installation
 
-You can either build the image locally or pull it from Docker Hub:
+You can either build the image locally or pull it from Docker Hub. The image is built for the Linux platform.
+
+#### Supported Platforms
+- Linux/amd64
+- Linux/arm64
+- Linux/arm/v7
 
 #### Option 1: Pull from Docker Hub
 ```bash
