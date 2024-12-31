@@ -20,6 +20,39 @@ The server exposes the following resources:
 
 All resources auto-update as their respective objects are modified in HubSpot.
 
+### Example Prompts
+
+- Create Hubspot contacts by copying from LinkedIn profile webpage: 
+    ```
+    Create HubSpot contacts and companies from following:
+
+    John Doe
+    Software Engineer at Tech Corp
+    San Francisco Bay Area • 500+ connections
+    
+    Experience
+    Tech Corp
+    Software Engineer
+    Jan 2020 - Present · 4 yrs
+    San Francisco, California
+    
+    Previous Company Inc.
+    Senior Developer
+    2018 - 2020 · 2 yrs
+    
+    Education
+    University of California, Berkeley
+    Computer Science, BS
+    2014 - 2018
+    ```
+
+- Get latest activities for your company:
+    ```
+    What's happening latestly with my pipeline?
+    ```
+
+
+
 ### Tools
 
 The server offers several tools for managing HubSpot objects:
@@ -73,15 +106,6 @@ The server offers several tools for managing HubSpot objects:
   * No input required
   * Returns: Array of engagement objects with full metadata
 
-### Prompts
-
-The server provides a demonstration prompt:
-
-* `hubspot-demo`: Interactive prompt for HubSpot operations
-  * Required arguments:
-    * `operation` - The type of operation to perform (e.g., "create", "get")
-    * `object_type` - The type of object to operate on (e.g., "contact", "company")
-  * Guides users through HubSpot operations
 
 ## Setup
 
