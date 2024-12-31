@@ -130,6 +130,26 @@ docker run \
   buryhuang/mcp-hubspot:latest
 ```
 
+## Cross-Platform Publishing
+
+To publish the Docker image for multiple platforms, you can use the `docker buildx` command. Follow these steps:
+
+1. **Create a new builder instance** (if you haven't already):
+   ```bash
+   docker buildx create --use
+   ```
+
+2. **Build and push the image for multiple platforms**:
+   ```bash
+   docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t buryhuang/mcp-hubspot:latest --push .
+   ```
+
+3. **Verify the image is available for the specified platforms**:
+   ```bash
+   docker buildx imagetools inspect buryhuang/mcp-hubspot:latest
+   ```
+
+
 ## Usage with Claude Desktop
 
 ### Docker Usage
