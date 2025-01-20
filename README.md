@@ -192,7 +192,7 @@ To publish the Docker image for multiple platforms, you can use the `docker buil
 To install mcp-hubspot for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-hubspot/prod):
 
 ```bash
-npx @smithery/cli@latest install mcp-hubspot --client claude
+npx -y @smithery/cli@latest install mcp-hubspot --client claude
 ```
 
 ### Docker Usage
