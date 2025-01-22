@@ -1,5 +1,5 @@
 # HubSpot MCP Server
-[![smithery badge](https://smithery.ai/badge/mcp-hubspot)](https://smithery.ai/server/mcp-hubspot/prod)
+[![Docker Hub](https://img.shields.io/docker/v/buryhuang/mcp-hubspot?label=Docker%20Hub)](https://hub.docker.com/r/buryhuang/mcp-hubspot) [![smithery badge](https://smithery.ai/badge/mcp-hubspot)](https://smithery.ai/server/mcp-hubspot/prod)
 
 ## Overview
 
