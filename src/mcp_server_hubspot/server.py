@@ -414,7 +414,7 @@ async def main(access_token: Optional[str] = None):
                 },
             ),
             types.Tool(
-                name="hubspot_get_recent_companies",
+                name="hubspot_get_active_companies",
                 description="Get most recently active companies from HubSpot",
                 inputSchema={
                     "type": "object",
@@ -424,7 +424,7 @@ async def main(access_token: Optional[str] = None):
                 },
             ),
             types.Tool(
-                name="hubspot_get_recent_contacts",
+                name="hubspot_get_active_contacts",
                 description="Get most recently active contacts from HubSpot",
                 inputSchema={
                     "type": "object",
@@ -592,7 +592,7 @@ async def main(access_token: Optional[str] = None):
                 results = hubspot.get_recent_engagements(days=days, limit=limit)
                 return [types.TextContent(type="text", text=results)]
 
-            elif name == "hubspot_get_recent_companies":
+            elif name == "hubspot_get_active_companies":
                 # Extract parameters with defaults if not provided
                 limit = arguments.get("limit", 10) if arguments else 10
                 
@@ -603,7 +603,7 @@ async def main(access_token: Optional[str] = None):
                 results = hubspot.get_recent_companies(limit=limit)
                 return [types.TextContent(type="text", text=results)]
 
-            elif name == "hubspot_get_recent_contacts":
+            elif name == "hubspot_get_active_contacts":
                 # Extract parameters with defaults if not provided
                 limit = arguments.get("limit", 10) if arguments else 10
                 
