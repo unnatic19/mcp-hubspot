@@ -351,20 +351,7 @@ async def main(access_token: Optional[str] = None):
 
     @server.list_resources()
     async def handle_list_resources() -> list[types.Resource]:
-        return [
-            types.Resource(
-                uri=AnyUrl("hubspot://hubspot_recent_companies"),
-                name="Recent HubSpot Companies",
-                description="List of most recently active HubSpot companies",
-                mimeType="application/json",
-            ),
-            types.Resource(
-                uri=AnyUrl("hubspot://hubspot_recent_contacts"),
-                name="Recent HubSpot Contacts",
-                description="List of most recently active HubSpot contacts",
-                mimeType="application/json",
-            ),
-        ]
+        return []
 
     @server.read_resource()
     async def handle_read_resource(uri: AnyUrl) -> str:
@@ -372,17 +359,7 @@ async def main(access_token: Optional[str] = None):
             raise ValueError(f"Unsupported URI scheme: {uri.scheme}")
 
         path = str(uri).replace("hubspot://", "")
-        if path == "hubspot_recent_engagements":
-            # Get engagements from the last 3 days by default
-            return str(hubspot.get_recent_engagements(days=3, limit=50))
-        elif path == "hubspot_recent_companies":
-            # Get 10 most recent companies by default
-            return str(hubspot.get_recent_companies(limit=10))
-        elif path == "hubspot_recent_contacts":
-            # Get 10 most recent contacts by default
-            return str(hubspot.get_recent_contacts(limit=10))
-        else:
-            raise ValueError(f"Unknown resource path: {path}")
+        return ""
 
     @server.list_tools()
     async def handle_list_tools() -> list[types.Tool]:
