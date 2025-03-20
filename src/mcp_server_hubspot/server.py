@@ -100,6 +100,42 @@ class HubSpotClient:
             logger.error(f"Exception: {str(e)}")
             return json.dumps({"error": str(e)})
 
+    def get_recent_contacts(self, limit: int = 10) -> str:
+        """Get most recently active contacts from HubSpot
+        
+        Args:
+            limit: Maximum number of contacts to return (default: 10)
+        """
+        try:
+            from hubspot.crm.contacts import PublicObjectSearchRequest
+            
+            # Create search request with sort by lastmodifieddate
+            search_request = PublicObjectSearchRequest(
+                sorts=[{
+                    "propertyName": "lastmodifieddate",
+                    "direction": "DESCENDING"
+                }],
+                limit=limit,
+                properties=["firstname", "lastname", "email", "phone", "company", "hs_lastmodifieddate", "lastmodifieddate"]
+            )
+            
+            # Execute the search
+            search_response = self.client.crm.contacts.search_api.do_search(
+                public_object_search_request=search_request
+            )
+            
+            # Convert the response to a dictionary
+            contacts_dict = [contact.to_dict() for contact in search_response.results]
+            converted_contacts = convert_datetime_fields(contacts_dict)
+            return json.dumps(converted_contacts)
+            
+        except ApiException as e:
+            logger.error(f"API Exception: {str(e)}")
+            return json.dumps({"error": str(e)})
+        except Exception as e:
+            logger.error(f"Exception: {str(e)}")
+            return json.dumps({"error": str(e)})
+
     def get_company_activity(self, company_id: str) -> str:
         """Get activity history for a specific company"""
         try:
@@ -358,6 +394,12 @@ async def main(access_token: Optional[str] = None):
                 description="List of most recently active HubSpot companies",
                 mimeType="application/json",
             ),
+            types.Resource(
+                uri=AnyUrl("hubspot://hubspot_recent_contacts"),
+                name="Recent HubSpot Contacts",
+                description="List of most recently active HubSpot contacts",
+                mimeType="application/json",
+            ),
         ]
 
     @server.read_resource()
@@ -376,6 +418,9 @@ async def main(access_token: Optional[str] = None):
         elif path == "hubspot_recent_companies":
             # Get 10 most recent companies by default
             return str(hubspot.get_recent_companies(limit=10))
+        elif path == "hubspot_recent_contacts":
+            # Get 10 most recent contacts by default
+            return str(hubspot.get_recent_contacts(limit=10))
         else:
             raise ValueError(f"Unknown resource path: {path}")
 
@@ -454,6 +499,16 @@ async def main(access_token: Optional[str] = None):
                     "type": "object",
                     "properties": {
                         "limit": {"type": "integer", "description": "Maximum number of companies to return (default: 10)"}
+                    },
+                },
+            ),
+            types.Tool(
+                name="hubspot_get_recent_contacts",
+                description="Get most recently active contacts from HubSpot",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "description": "Maximum number of contacts to return (default: 10)"}
                     },
                 },
             ),
@@ -633,6 +688,17 @@ async def main(access_token: Optional[str] = None):
                 
                 # Get recent companies
                 results = hubspot.get_recent_companies(limit=limit)
+                return [types.TextContent(type="text", text=results)]
+
+            elif name == "hubspot_get_recent_contacts":
+                # Extract parameters with defaults if not provided
+                limit = arguments.get("limit", 10) if arguments else 10
+                
+                # Ensure limit is an integer
+                limit = int(limit) if limit is not None else 10
+                
+                # Get recent contacts
+                results = hubspot.get_recent_contacts(limit=limit)
                 return [types.TextContent(type="text", text=results)]
 
             else:
