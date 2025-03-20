@@ -15,13 +15,8 @@ For more information about the Model Context Protocol and how it works, see [Ant
 
 ### Resources
 
-The server exposes the following resources:
+No resources are implemented. At the end of the day, tools are all we need.
 
-* `hubspot://hubspot_contacts`: A dynamic resource that provides access to HubSpot contacts
-* `hubspot://hubspot_companies`: A dynamic resource that provides access to HubSpot companies
-* `hubspot://hubspot_recent_engagements`: A dynamic resource that provides access to HubSpot engagements from the last 3 days
-
-All resources auto-update as their respective objects are modified in HubSpot.
 
 ### Example Prompts
 
@@ -61,11 +56,6 @@ All resources auto-update as their respective objects are modified in HubSpot.
 The server offers several tools for managing HubSpot objects:
 
 #### Contact Management Tools
-* `hubspot_get_contacts`
-  * Retrieve contacts from HubSpot
-  * No input required
-  * Returns: Array of contact objects
-
 * `hubspot_create_contact`
   * Create a new contact in HubSpot (checks for duplicates before creation)
   * Input:
@@ -81,11 +71,6 @@ The server offers several tools for managing HubSpot objects:
     * Creates new contact only if no match is found
 
 #### Company Management Tools
-* `hubspot_get_companies`
-  * Retrieve companies from HubSpot
-  * No input required
-  * Returns: Array of company objects
-
 * `hubspot_create_company`
   * Create a new company in HubSpot (checks for duplicates before creation)
   * Input:
@@ -110,6 +95,18 @@ The server offers several tools for managing HubSpot objects:
     * `days` (integer, optional): Number of days to look back (default: 7)
     * `limit` (integer, optional): Maximum number of engagements to return (default: 50)
   * Returns: Array of engagement objects with full metadata
+
+* `hubspot_get_recent_companies`
+  * Get most recently active companies from HubSpot
+  * Input:
+    * `limit` (integer, optional): Maximum number of companies to return (default: 10)
+  * Returns: Array of company objects with full metadata
+
+* `hubspot_get_recent_contacts`
+  * Get most recently active contacts from HubSpot
+  * Input:
+    * `limit` (integer, optional): Maximum number of contacts to return (default: 10)
+  * Returns: Array of contact objects with full metadata
 
 
 ## Setup

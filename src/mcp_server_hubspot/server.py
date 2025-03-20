@@ -40,28 +40,76 @@ class HubSpotClient:
         
         self.client = HubSpot(access_token=access_token)
 
-    def get_contacts(self) -> str:
-        """Get all contacts from HubSpot"""
+    def get_recent_companies(self, limit: int = 10) -> str:
+        """Get most recently active companies from HubSpot
+        
+        Args:
+            limit: Maximum number of companies to return (default: 10)
+        """
         try:
-            contacts = self.client.crm.contacts.get_all()
-            contacts_dict = [contact.to_dict() for contact in contacts]
-            converted_contacts = convert_datetime_fields(contacts_dict)
-            return json.dumps(converted_contacts)
-        except ApiException as e:
-            return json.dumps({"error": str(e)})
-        except Exception as e:
-            return json.dumps({"error": str(e)})
-
-    def get_companies(self) -> str:
-        """Get all companies from HubSpot"""
-        try:
-            companies = self.client.crm.companies.get_all()
-            companies_dict = [company.to_dict() for company in companies]
+            from hubspot.crm.companies import PublicObjectSearchRequest
+            
+            # Create search request with sort by lastmodifieddate
+            search_request = PublicObjectSearchRequest(
+                sorts=[{
+                    "propertyName": "lastmodifieddate",
+                    "direction": "DESCENDING"
+                }],
+                limit=limit,
+                properties=["name", "domain", "website", "phone", "industry", "hs_lastmodifieddate"]
+            )
+            
+            # Execute the search
+            search_response = self.client.crm.companies.search_api.do_search(
+                public_object_search_request=search_request
+            )
+            
+            # Convert the response to a dictionary
+            companies_dict = [company.to_dict() for company in search_response.results]
             converted_companies = convert_datetime_fields(companies_dict)
             return json.dumps(converted_companies)
+            
         except ApiException as e:
+            logger.error(f"API Exception: {str(e)}")
             return json.dumps({"error": str(e)})
         except Exception as e:
+            logger.error(f"Exception: {str(e)}")
+            return json.dumps({"error": str(e)})
+
+    def get_recent_contacts(self, limit: int = 10) -> str:
+        """Get most recently active contacts from HubSpot
+        
+        Args:
+            limit: Maximum number of contacts to return (default: 10)
+        """
+        try:
+            from hubspot.crm.contacts import PublicObjectSearchRequest
+            
+            # Create search request with sort by lastmodifieddate
+            search_request = PublicObjectSearchRequest(
+                sorts=[{
+                    "propertyName": "lastmodifieddate",
+                    "direction": "DESCENDING"
+                }],
+                limit=limit,
+                properties=["firstname", "lastname", "email", "phone", "company", "hs_lastmodifieddate", "lastmodifieddate"]
+            )
+            
+            # Execute the search
+            search_response = self.client.crm.contacts.search_api.do_search(
+                public_object_search_request=search_request
+            )
+            
+            # Convert the response to a dictionary
+            contacts_dict = [contact.to_dict() for contact in search_response.results]
+            converted_contacts = convert_datetime_fields(contacts_dict)
+            return json.dumps(converted_contacts)
+            
+        except ApiException as e:
+            logger.error(f"API Exception: {str(e)}")
+            return json.dumps({"error": str(e)})
+        except Exception as e:
+            logger.error(f"Exception: {str(e)}")
             return json.dumps({"error": str(e)})
 
     def get_company_activity(self, company_id: str) -> str:
@@ -303,20 +351,7 @@ async def main(access_token: Optional[str] = None):
 
     @server.list_resources()
     async def handle_list_resources() -> list[types.Resource]:
-        return [
-            types.Resource(
-                uri=AnyUrl("hubspot://hubspot_contacts"),
-                name="HubSpot Contacts",
-                description="List of HubSpot contacts",
-                mimeType="application/json",
-            ),
-            types.Resource(
-                uri=AnyUrl("hubspot://hubspot_companies"),
-                name="HubSpot Companies", 
-                description="List of HubSpot companies",
-                mimeType="application/json",
-            ),
-        ]
+        return []
 
     @server.read_resource()
     async def handle_read_resource(uri: AnyUrl) -> str:
@@ -324,28 +359,12 @@ async def main(access_token: Optional[str] = None):
             raise ValueError(f"Unsupported URI scheme: {uri.scheme}")
 
         path = str(uri).replace("hubspot://", "")
-        if path == "hubspot_contacts":
-            return str(hubspot.get_contacts())
-        elif path == "hubspot_companies":
-            return str(hubspot.get_companies())
-        elif path == "hubspot_recent_engagements":
-            # Get engagements from the last 3 days by default
-            return str(hubspot.get_recent_engagements(days=3, limit=50))
-        else:
-            raise ValueError(f"Unknown resource path: {path}")
+        return ""
 
     @server.list_tools()
     async def handle_list_tools() -> list[types.Tool]:
         """List available tools"""
         return [
-            types.Tool(
-                name="hubspot_get_contacts",
-                description="Get contacts from HubSpot",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
-                },
-            ),
             types.Tool(
                 name="hubspot_create_contact",
                 description="Create a new contact in HubSpot",
@@ -358,14 +377,6 @@ async def main(access_token: Optional[str] = None):
                         "properties": {"type": "object", "description": "Additional contact properties"}
                     },
                     "required": ["firstname", "lastname"]
-                },
-            ),
-            types.Tool(
-                name="hubspot_get_companies",
-                description="Get companies from HubSpot",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
                 },
             ),
             types.Tool(
@@ -402,6 +413,26 @@ async def main(access_token: Optional[str] = None):
                     },
                 },
             ),
+            types.Tool(
+                name="hubspot_get_active_companies",
+                description="Get most recently active companies from HubSpot",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "description": "Maximum number of companies to return (default: 10)"}
+                    },
+                },
+            ),
+            types.Tool(
+                name="hubspot_get_active_contacts",
+                description="Get most recently active contacts from HubSpot",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "description": "Maximum number of contacts to return (default: 10)"}
+                    },
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -410,11 +441,7 @@ async def main(access_token: Optional[str] = None):
     ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
         """Handle tool execution requests"""
         try:
-            if name == "hubspot_get_contacts":
-                results = hubspot.get_contacts()
-                return [types.TextContent(type="text", text=str(results))]
-
-            elif name == "hubspot_create_contact":
+            if name == "hubspot_create_contact":
                 if not arguments:
                     raise ValueError("Missing arguments for create_contact")
                 
@@ -491,10 +518,6 @@ async def main(access_token: Optional[str] = None):
                 except ApiException as e:
                     return [types.TextContent(type="text", text=f"HubSpot API error: {str(e)}")]
 
-            elif name == "hubspot_get_companies":
-                results = hubspot.get_companies()
-                return [types.TextContent(type="text", text=str(results))]
-
             elif name == "hubspot_create_company":
                 if not arguments:
                     raise ValueError("Missing arguments for create_company")
@@ -567,6 +590,28 @@ async def main(access_token: Optional[str] = None):
                 
                 # Get recent engagements
                 results = hubspot.get_recent_engagements(days=days, limit=limit)
+                return [types.TextContent(type="text", text=results)]
+
+            elif name == "hubspot_get_active_companies":
+                # Extract parameters with defaults if not provided
+                limit = arguments.get("limit", 10) if arguments else 10
+                
+                # Ensure limit is an integer
+                limit = int(limit) if limit is not None else 10
+                
+                # Get recent companies
+                results = hubspot.get_recent_companies(limit=limit)
+                return [types.TextContent(type="text", text=results)]
+
+            elif name == "hubspot_get_active_contacts":
+                # Extract parameters with defaults if not provided
+                limit = arguments.get("limit", 10) if arguments else 10
+                
+                # Ensure limit is an integer
+                limit = int(limit) if limit is not None else 10
+                
+                # Get recent contacts
+                results = hubspot.get_recent_contacts(limit=limit)
                 return [types.TextContent(type="text", text=results)]
 
             else:
