@@ -40,30 +40,6 @@ class HubSpotClient:
         
         self.client = HubSpot(access_token=access_token)
 
-    def get_contacts(self) -> str:
-        """Get all contacts from HubSpot"""
-        try:
-            contacts = self.client.crm.contacts.get_all()
-            contacts_dict = [contact.to_dict() for contact in contacts]
-            converted_contacts = convert_datetime_fields(contacts_dict)
-            return json.dumps(converted_contacts)
-        except ApiException as e:
-            return json.dumps({"error": str(e)})
-        except Exception as e:
-            return json.dumps({"error": str(e)})
-
-    def get_companies(self) -> str:
-        """Get all companies from HubSpot"""
-        try:
-            companies = self.client.crm.companies.get_all()
-            companies_dict = [company.to_dict() for company in companies]
-            converted_companies = convert_datetime_fields(companies_dict)
-            return json.dumps(converted_companies)
-        except ApiException as e:
-            return json.dumps({"error": str(e)})
-        except Exception as e:
-            return json.dumps({"error": str(e)})
-
     def get_recent_companies(self, limit: int = 10) -> str:
         """Get most recently active companies from HubSpot
         
@@ -377,18 +353,6 @@ async def main(access_token: Optional[str] = None):
     async def handle_list_resources() -> list[types.Resource]:
         return [
             types.Resource(
-                uri=AnyUrl("hubspot://hubspot_contacts"),
-                name="HubSpot Contacts",
-                description="List of HubSpot contacts",
-                mimeType="application/json",
-            ),
-            types.Resource(
-                uri=AnyUrl("hubspot://hubspot_companies"),
-                name="HubSpot Companies", 
-                description="List of HubSpot companies",
-                mimeType="application/json",
-            ),
-            types.Resource(
                 uri=AnyUrl("hubspot://hubspot_recent_companies"),
                 name="Recent HubSpot Companies",
                 description="List of most recently active HubSpot companies",
@@ -408,11 +372,7 @@ async def main(access_token: Optional[str] = None):
             raise ValueError(f"Unsupported URI scheme: {uri.scheme}")
 
         path = str(uri).replace("hubspot://", "")
-        if path == "hubspot_contacts":
-            return str(hubspot.get_contacts())
-        elif path == "hubspot_companies":
-            return str(hubspot.get_companies())
-        elif path == "hubspot_recent_engagements":
+        if path == "hubspot_recent_engagements":
             # Get engagements from the last 3 days by default
             return str(hubspot.get_recent_engagements(days=3, limit=50))
         elif path == "hubspot_recent_companies":
@@ -429,14 +389,6 @@ async def main(access_token: Optional[str] = None):
         """List available tools"""
         return [
             types.Tool(
-                name="hubspot_get_contacts",
-                description="Get contacts from HubSpot",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
-                },
-            ),
-            types.Tool(
                 name="hubspot_create_contact",
                 description="Create a new contact in HubSpot",
                 inputSchema={
@@ -448,14 +400,6 @@ async def main(access_token: Optional[str] = None):
                         "properties": {"type": "object", "description": "Additional contact properties"}
                     },
                     "required": ["firstname", "lastname"]
-                },
-            ),
-            types.Tool(
-                name="hubspot_get_companies",
-                description="Get companies from HubSpot",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
                 },
             ),
             types.Tool(
@@ -520,11 +464,7 @@ async def main(access_token: Optional[str] = None):
     ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
         """Handle tool execution requests"""
         try:
-            if name == "hubspot_get_contacts":
-                results = hubspot.get_contacts()
-                return [types.TextContent(type="text", text=str(results))]
-
-            elif name == "hubspot_create_contact":
+            if name == "hubspot_create_contact":
                 if not arguments:
                     raise ValueError("Missing arguments for create_contact")
                 
@@ -600,10 +540,6 @@ async def main(access_token: Optional[str] = None):
                     
                 except ApiException as e:
                     return [types.TextContent(type="text", text=f"HubSpot API error: {str(e)}")]
-
-            elif name == "hubspot_get_companies":
-                results = hubspot.get_companies()
-                return [types.TextContent(type="text", text=str(results))]
 
             elif name == "hubspot_create_company":
                 if not arguments:
