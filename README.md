@@ -2,7 +2,6 @@
 [![Docker Hub](https://img.shields.io/docker/pulls/buryhuang/mcp-hubspot?label=Docker%20Hub)](https://hub.docker.com/r/buryhuang/mcp-hubspot) 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[![smithery badge](https://smithery.ai/badge/mcp-hubspot)](https://smithery.ai/server/mcp-hubspot/prod)[![smithery badge](https://smithery.ai/badge/buryhuang/mcp-hubspot)](https://smithery.ai/server/buryhuang/mcp-hubspot)
 
 ## Overview
 
