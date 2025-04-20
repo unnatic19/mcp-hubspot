@@ -304,6 +304,8 @@ async def main(access_token: Optional[str] = None):
                         model=embedding_model,
                         metadata_extras={"company_id": arguments["company_id"]}
                     )
+                    # Save indexes after successful storage
+                    faiss_manager.save_today_index()
                 except Exception as e:
                     logger.error(f"Error storing in FAISS: {str(e)}")
                 
@@ -331,6 +333,8 @@ async def main(access_token: Optional[str] = None):
                         model=embedding_model,
                         metadata_extras={"days": days, "limit": limit}
                     )
+                    # Save indexes after successful storage
+                    faiss_manager.save_today_index()
                 except Exception as e:
                     logger.error(f"Error storing in FAISS: {str(e)}")
                 
@@ -356,6 +360,8 @@ async def main(access_token: Optional[str] = None):
                         model=embedding_model,
                         metadata_extras={"limit": limit}
                     )
+                    # Save indexes after successful storage
+                    faiss_manager.save_today_index()
                 except Exception as e:
                     logger.error(f"Error storing in FAISS: {str(e)}")
                 
@@ -381,6 +387,8 @@ async def main(access_token: Optional[str] = None):
                         model=embedding_model,
                         metadata_extras={"limit": limit}
                     )
+                    # Save indexes after successful storage
+                    faiss_manager.save_today_index()
                 except Exception as e:
                     logger.error(f"Error storing in FAISS: {str(e)}")
                 
@@ -418,7 +426,7 @@ async def main(access_token: Optional[str] = None):
 
     # Register shutdown handler to save indexes
     import atexit
-    atexit.register(faiss_manager.save_all_indexes)
+    atexit.register(faiss_manager.save_today_index)
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         logger.info("Server running with stdio transport")

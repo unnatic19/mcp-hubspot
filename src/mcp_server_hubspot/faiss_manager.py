@@ -173,6 +173,15 @@ class FaissManager:
         for date_str in self.indexes:
             self._save_index(date_str)
     
+    def save_today_index(self) -> None:
+        """Save only today's index and metadata to disk."""
+        today = self._get_today_date_str()
+        if today in self.indexes:
+            self._save_index(today)
+            logger.info(f"Saved today's index ({today})")
+        else:
+            logger.warning(f"Today's index ({today}) does not exist")
+    
     def _save_index(self, date_str: str) -> None:
         """Save an index and its metadata to disk.
         
