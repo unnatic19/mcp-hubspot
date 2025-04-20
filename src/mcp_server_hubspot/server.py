@@ -2,350 +2,55 @@ import logging
 from typing import Any, Dict, List, Optional
 import os
 from dotenv import load_dotenv
-from hubspot import HubSpot
-from hubspot.crm.contacts import SimplePublicObjectInputForCreate
-from hubspot.crm.contacts.exceptions import ApiException
 from mcp.server.models import InitializationOptions
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
 import mcp.server.stdio
 from pydantic import AnyUrl
 import json
-from datetime import datetime, timedelta
-from dateutil.tz import tzlocal
 import argparse
+from sentence_transformers import SentenceTransformer
+
+# Import HubSpotClient and ApiException from our module
+from .hubspot_client import HubSpotClient, ApiException
+# Import FAISS manager
+from .faiss_manager import FaissManager
+# Import utility functions
+from .utils import store_in_faiss, search_in_faiss
 
 logger = logging.getLogger('mcp_hubspot_server')
-
-def convert_datetime_fields(obj: Any) -> Any:
-    """Convert any datetime or tzlocal objects to string in the given object"""
-    if isinstance(obj, dict):
-        return {k: convert_datetime_fields(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_datetime_fields(item) for item in obj]
-    elif isinstance(obj, datetime):
-        return obj.isoformat()
-    elif isinstance(obj, tzlocal):
-        # Get the current timezone offset
-        offset = datetime.now(tzlocal()).strftime('%z')
-        return f"UTC{offset[:3]}:{offset[3:]}"  # Format like "UTC+08:00" or "UTC-05:00"
-    return obj
-
-class HubSpotClient:
-    def __init__(self, access_token: Optional[str] = None):
-        access_token = access_token or os.getenv("HUBSPOT_ACCESS_TOKEN")
-        logger.debug(f"Using access token: {'[MASKED]' if access_token else 'None'}")
-        if not access_token:
-            raise ValueError("HUBSPOT_ACCESS_TOKEN environment variable is required")
-        
-        self.client = HubSpot(access_token=access_token)
-
-    def get_recent_companies(self, limit: int = 10) -> str:
-        """Get most recently active companies from HubSpot
-        
-        Args:
-            limit: Maximum number of companies to return (default: 10)
-        """
-        try:
-            from hubspot.crm.companies import PublicObjectSearchRequest
-            
-            # Create search request with sort by lastmodifieddate
-            search_request = PublicObjectSearchRequest(
-                sorts=[{
-                    "propertyName": "lastmodifieddate",
-                    "direction": "DESCENDING"
-                }],
-                limit=limit,
-                properties=["name", "domain", "website", "phone", "industry", "hs_lastmodifieddate"]
-            )
-            
-            # Execute the search
-            search_response = self.client.crm.companies.search_api.do_search(
-                public_object_search_request=search_request
-            )
-            
-            # Convert the response to a dictionary
-            companies_dict = [company.to_dict() for company in search_response.results]
-            converted_companies = convert_datetime_fields(companies_dict)
-            return json.dumps(converted_companies)
-            
-        except ApiException as e:
-            logger.error(f"API Exception: {str(e)}")
-            return json.dumps({"error": str(e)})
-        except Exception as e:
-            logger.error(f"Exception: {str(e)}")
-            return json.dumps({"error": str(e)})
-
-    def get_recent_contacts(self, limit: int = 10) -> str:
-        """Get most recently active contacts from HubSpot
-        
-        Args:
-            limit: Maximum number of contacts to return (default: 10)
-        """
-        try:
-            from hubspot.crm.contacts import PublicObjectSearchRequest
-            
-            # Create search request with sort by lastmodifieddate
-            search_request = PublicObjectSearchRequest(
-                sorts=[{
-                    "propertyName": "lastmodifieddate",
-                    "direction": "DESCENDING"
-                }],
-                limit=limit,
-                properties=["firstname", "lastname", "email", "phone", "company", "hs_lastmodifieddate", "lastmodifieddate"]
-            )
-            
-            # Execute the search
-            search_response = self.client.crm.contacts.search_api.do_search(
-                public_object_search_request=search_request
-            )
-            
-            # Convert the response to a dictionary
-            contacts_dict = [contact.to_dict() for contact in search_response.results]
-            converted_contacts = convert_datetime_fields(contacts_dict)
-            return json.dumps(converted_contacts)
-            
-        except ApiException as e:
-            logger.error(f"API Exception: {str(e)}")
-            return json.dumps({"error": str(e)})
-        except Exception as e:
-            logger.error(f"Exception: {str(e)}")
-            return json.dumps({"error": str(e)})
-
-    def get_company_activity(self, company_id: str) -> str:
-        """Get activity history for a specific company"""
-        try:
-            # Step 1: Get all engagement IDs associated with the company using CRM Associations v4 API
-            associated_engagements = self.client.crm.associations.v4.basic_api.get_page(
-                object_type="companies",
-                object_id=company_id,
-                to_object_type="engagements",
-                limit=500
-            )
-            
-            # Extract engagement IDs from the associations response
-            engagement_ids = []
-            if hasattr(associated_engagements, 'results'):
-                for result in associated_engagements.results:
-                    engagement_ids.append(result.to_object_id)
-
-            # Step 2: Get detailed information for each engagement
-            activities = []
-            for engagement_id in engagement_ids:
-                engagement_response = self.client.api_request({
-                    "method": "GET",
-                    "path": f"/engagements/v1/engagements/{engagement_id}"
-                }).json()
-                
-                engagement_data = engagement_response.get('engagement', {})
-                metadata = engagement_response.get('metadata', {})
-                
-                # Format the engagement
-                formatted_engagement = {
-                    "id": engagement_data.get("id"),
-                    "type": engagement_data.get("type"),
-                    "created_at": engagement_data.get("createdAt"),
-                    "last_updated": engagement_data.get("lastUpdated"),
-                    "created_by": engagement_data.get("createdBy"),
-                    "modified_by": engagement_data.get("modifiedBy"),
-                    "timestamp": engagement_data.get("timestamp"),
-                    "associations": engagement_response.get("associations", {})
-                }
-                
-                # Add type-specific metadata formatting
-                if engagement_data.get("type") == "NOTE":
-                    formatted_engagement["content"] = metadata.get("body", "")
-                elif engagement_data.get("type") == "EMAIL":
-                    formatted_engagement["content"] = {
-                        "subject": metadata.get("subject", ""),
-                        "from": {
-                            "raw": metadata.get("from", {}).get("raw", ""),
-                            "email": metadata.get("from", {}).get("email", ""),
-                            "firstName": metadata.get("from", {}).get("firstName", ""),
-                            "lastName": metadata.get("from", {}).get("lastName", "")
-                        },
-                        "to": [{
-                            "raw": recipient.get("raw", ""),
-                            "email": recipient.get("email", ""),
-                            "firstName": recipient.get("firstName", ""),
-                            "lastName": recipient.get("lastName", "")
-                        } for recipient in metadata.get("to", [])],
-                        "cc": [{
-                            "raw": recipient.get("raw", ""),
-                            "email": recipient.get("email", ""),
-                            "firstName": recipient.get("firstName", ""),
-                            "lastName": recipient.get("lastName", "")
-                        } for recipient in metadata.get("cc", [])],
-                        "bcc": [{
-                            "raw": recipient.get("raw", ""),
-                            "email": recipient.get("email", ""),
-                            "firstName": recipient.get("firstName", ""),
-                            "lastName": recipient.get("lastName", "")
-                        } for recipient in metadata.get("bcc", [])],
-                        "sender": {
-                            "email": metadata.get("sender", {}).get("email", "")
-                        },
-                        "body": metadata.get("text", "") or metadata.get("html", "")
-                    }
-                elif engagement_data.get("type") == "TASK":
-                    formatted_engagement["content"] = {
-                        "subject": metadata.get("subject", ""),
-                        "body": metadata.get("body", ""),
-                        "status": metadata.get("status", ""),
-                        "for_object_type": metadata.get("forObjectType", "")
-                    }
-                elif engagement_data.get("type") == "MEETING":
-                    formatted_engagement["content"] = {
-                        "title": metadata.get("title", ""),
-                        "body": metadata.get("body", ""),
-                        "start_time": metadata.get("startTime"),
-                        "end_time": metadata.get("endTime"),
-                        "internal_notes": metadata.get("internalMeetingNotes", "")
-                    }
-                elif engagement_data.get("type") == "CALL":
-                    formatted_engagement["content"] = {
-                        "body": metadata.get("body", ""),
-                        "from_number": metadata.get("fromNumber", ""),
-                        "to_number": metadata.get("toNumber", ""),
-                        "duration_ms": metadata.get("durationMilliseconds"),
-                        "status": metadata.get("status", ""),
-                        "disposition": metadata.get("disposition", "")
-                    }
-                
-                activities.append(formatted_engagement)
-
-            # Convert any datetime fields and return
-            converted_activities = convert_datetime_fields(activities)
-            return json.dumps(converted_activities)
-            
-        except ApiException as e:
-            logger.error(f"API Exception: {str(e)}")
-            return json.dumps({"error": str(e)})
-        except Exception as e:
-            logger.error(f"Exception: {str(e)}")
-            return json.dumps({"error": str(e)})
-
-    def get_recent_engagements(self, days: int = 7, limit: int = 50) -> str:
-        """Get recent engagements across all contacts/companies
-        
-        Args:
-            days: Number of days to look back (default: 7)
-            limit: Maximum number of engagements to return (default: 50)
-        """
-        try:
-            # Calculate the date range (past N days)
-            end_time = datetime.now()
-            start_time = end_time - timedelta(days=days)
-            
-            # Format timestamps for API call
-            start_timestamp = int(start_time.timestamp() * 1000)  # Convert to milliseconds
-            end_timestamp = int(end_time.timestamp() * 1000)  # Convert to milliseconds
-            
-            # Get all recent engagements
-            engagements_response = self.client.api_request({
-                "method": "GET",
-                "path": f"/engagements/v1/engagements/recent/modified",
-                "params": {
-                    "count": limit,
-                    "since": start_timestamp,
-                    "offset": 0
-                }
-            }).json()
-            
-            # Format the engagements similar to company_activity
-            formatted_engagements = []
-            
-            for engagement in engagements_response.get('results', []):
-                engagement_data = engagement.get('engagement', {})
-                metadata = engagement.get('metadata', {})
-                
-                formatted_engagement = {
-                    "id": engagement_data.get("id"),
-                    "type": engagement_data.get("type"),
-                    "created_at": engagement_data.get("createdAt"),
-                    "last_updated": engagement_data.get("lastUpdated"),
-                    "created_by": engagement_data.get("createdBy"),
-                    "modified_by": engagement_data.get("modifiedBy"),
-                    "timestamp": engagement_data.get("timestamp"),
-                    "associations": engagement.get("associations", {})
-                }
-                
-                # Add type-specific metadata formatting identical to company_activity
-                if engagement_data.get("type") == "NOTE":
-                    formatted_engagement["content"] = metadata.get("body", "")
-                elif engagement_data.get("type") == "EMAIL":
-                    formatted_engagement["content"] = {
-                        "subject": metadata.get("subject", ""),
-                        "from": {
-                            "raw": metadata.get("from", {}).get("raw", ""),
-                            "email": metadata.get("from", {}).get("email", ""),
-                            "firstName": metadata.get("from", {}).get("firstName", ""),
-                            "lastName": metadata.get("from", {}).get("lastName", "")
-                        },
-                        "to": [{
-                            "raw": recipient.get("raw", ""),
-                            "email": recipient.get("email", ""),
-                            "firstName": recipient.get("firstName", ""),
-                            "lastName": recipient.get("lastName", "")
-                        } for recipient in metadata.get("to", [])],
-                        "cc": [{
-                            "raw": recipient.get("raw", ""),
-                            "email": recipient.get("email", ""),
-                            "firstName": recipient.get("firstName", ""),
-                            "lastName": recipient.get("lastName", "")
-                        } for recipient in metadata.get("cc", [])],
-                        "bcc": [{
-                            "raw": recipient.get("raw", ""),
-                            "email": recipient.get("email", ""),
-                            "firstName": recipient.get("firstName", ""),
-                            "lastName": recipient.get("lastName", "")
-                        } for recipient in metadata.get("bcc", [])],
-                        "sender": {
-                            "email": metadata.get("sender", {}).get("email", "")
-                        },
-                        "body": metadata.get("text", "") or metadata.get("html", "")
-                    }
-                elif engagement_data.get("type") == "TASK":
-                    formatted_engagement["content"] = {
-                        "subject": metadata.get("subject", ""),
-                        "body": metadata.get("body", ""),
-                        "status": metadata.get("status", ""),
-                        "for_object_type": metadata.get("forObjectType", "")
-                    }
-                elif engagement_data.get("type") == "MEETING":
-                    formatted_engagement["content"] = {
-                        "title": metadata.get("title", ""),
-                        "body": metadata.get("body", ""),
-                        "start_time": metadata.get("startTime"),
-                        "end_time": metadata.get("endTime"),
-                        "internal_notes": metadata.get("internalMeetingNotes", "")
-                    }
-                elif engagement_data.get("type") == "CALL":
-                    formatted_engagement["content"] = {
-                        "body": metadata.get("body", ""),
-                        "from_number": metadata.get("fromNumber", ""),
-                        "to_number": metadata.get("toNumber", ""),
-                        "duration_ms": metadata.get("durationMilliseconds"),
-                        "status": metadata.get("status", ""),
-                        "disposition": metadata.get("disposition", "")
-                    }
-                
-                formatted_engagements.append(formatted_engagement)
-            
-            # Convert any datetime fields and return
-            converted_engagements = convert_datetime_fields(formatted_engagements)
-            return json.dumps(converted_engagements)
-            
-        except ApiException as e:
-            logger.error(f"API Exception: {str(e)}")
-            return json.dumps({"error": str(e)})
-        except Exception as e:
-            logger.error(f"Exception: {str(e)}")
-            return json.dumps({"error": str(e)})
 
 async def main(access_token: Optional[str] = None):
     """Run the HubSpot MCP server."""
     logger.info("Server starting")
+    
+    # Initialize FAISS manager
+    storage_dir = os.getenv("HUBSPOT_STORAGE_DIR", "/storage")
+    logger.info(f"Using storage directory: {storage_dir}")
+    
+    # Load the embedding model at startup
+    logger.info("Loading embeddings model")
+    # Try to use local model if exists, otherwise download from HuggingFace
+    local_model_path = '/app/models/all-MiniLM-L6-v2'
+    if os.path.exists(local_model_path):
+        logger.info(f"Using local model from {local_model_path}")
+        embedding_model = SentenceTransformer(local_model_path)
+    else:
+        logger.info("Local model not found, downloading from HuggingFace")
+        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    # Get the model's embedding dimension
+    embedding_dim = embedding_model.get_sentence_embedding_dimension()
+    logger.info(f"Embeddings model loaded with dimension: {embedding_dim}")
+    
+    # Create FAISS manager with correct embedding dimension
+    faiss_manager = FaissManager(
+        storage_dir=storage_dir,
+        embedding_dimension=embedding_dim
+    )
+    logger.info(f"FAISS manager initialized with dimension {embedding_dim}")
+    
+    # Initialize HubSpot client
     hubspot = HubSpotClient(access_token)
     server = Server("hubspot-manager")
 
@@ -433,6 +138,19 @@ async def main(access_token: Optional[str] = None):
                     },
                 },
             ),
+            # Add new FAISS search tool
+            types.Tool(
+                name="hubspot_search_data",
+                description="Search for similar data in stored HubSpot API responses",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Text query to search for"},
+                        "limit": {"type": "integer", "description": "Maximum number of results to return (default: 10)"}
+                    },
+                    "required": ["query"]
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -506,6 +224,8 @@ async def main(access_token: Optional[str] = None):
                         properties.update(arguments["properties"])
                     
                     # Create contact using SimplePublicObjectInputForCreate
+                    from hubspot.crm.contacts import SimplePublicObjectInputForCreate
+                    
                     simple_public_object_input = SimplePublicObjectInputForCreate(
                         properties=properties
                     )
@@ -561,6 +281,8 @@ async def main(access_token: Optional[str] = None):
                         properties.update(arguments["properties"])
                     
                     # Create company using SimplePublicObjectInputForCreate
+                    from hubspot.crm.companies import SimplePublicObjectInputForCreate
+                    
                     simple_public_object_input = SimplePublicObjectInputForCreate(
                         properties=properties
                     )
@@ -577,6 +299,27 @@ async def main(access_token: Optional[str] = None):
                 if not arguments:
                     raise ValueError("Missing arguments for get_company_activity")
                 results = hubspot.get_company_activity(arguments["company_id"])
+                
+                # Store in FAISS for future reference
+                try:
+                    data = json.loads(results)
+                    metadata_extras = {"company_id": arguments["company_id"]}
+                    logger.debug(f"Preparing to store {len(data) if isinstance(data, list) else 'single'} company_activity data item(s) in FAISS")
+                    logger.debug(f"Metadata extras: {metadata_extras}")
+                    store_in_faiss(
+                        faiss_manager=faiss_manager,
+                        data=data,
+                        data_type="company_activity",
+                        model=embedding_model,
+                        metadata_extras=metadata_extras
+                    )
+                    # Save indexes after successful storage
+                    logger.debug("FAISS storage completed, now saving today's index")
+                    faiss_manager.save_today_index()
+                    logger.debug("Index saving completed")
+                except Exception as e:
+                    logger.error(f"Error storing in FAISS: {str(e)}", exc_info=True)
+                
                 return [types.TextContent(type="text", text=results)]
                 
             elif name == "hubspot_get_recent_engagements":
@@ -590,6 +333,27 @@ async def main(access_token: Optional[str] = None):
                 
                 # Get recent engagements
                 results = hubspot.get_recent_engagements(days=days, limit=limit)
+                
+                # Store in FAISS for future reference
+                try:
+                    data = json.loads(results)
+                    metadata_extras = {"days": days, "limit": limit}
+                    logger.debug(f"Preparing to store {len(data) if isinstance(data, list) else 'single'} engagement data item(s) in FAISS")
+                    logger.debug(f"Metadata extras: {metadata_extras}")
+                    store_in_faiss(
+                        faiss_manager=faiss_manager,
+                        data=data,
+                        data_type="engagement",
+                        model=embedding_model,
+                        metadata_extras=metadata_extras
+                    )
+                    # Save indexes after successful storage
+                    logger.debug("FAISS storage completed, now saving today's index")
+                    faiss_manager.save_today_index()
+                    logger.debug("Index saving completed")
+                except Exception as e:
+                    logger.error(f"Error storing in FAISS: {str(e)}", exc_info=True)
+                
                 return [types.TextContent(type="text", text=results)]
 
             elif name == "hubspot_get_active_companies":
@@ -601,6 +365,27 @@ async def main(access_token: Optional[str] = None):
                 
                 # Get recent companies
                 results = hubspot.get_recent_companies(limit=limit)
+                
+                # Store in FAISS for future reference
+                try:
+                    data = json.loads(results)
+                    metadata_extras = {"limit": limit}
+                    logger.debug(f"Preparing to store {len(data) if isinstance(data, list) else 'single'} company data item(s) in FAISS")
+                    logger.debug(f"Metadata extras: {metadata_extras}")
+                    store_in_faiss(
+                        faiss_manager=faiss_manager,
+                        data=data,
+                        data_type="company",
+                        model=embedding_model,
+                        metadata_extras=metadata_extras
+                    )
+                    # Save indexes after successful storage
+                    logger.debug("FAISS storage completed, now saving today's index")
+                    faiss_manager.save_today_index()
+                    logger.debug("Index saving completed")
+                except Exception as e:
+                    logger.error(f"Error storing in FAISS: {str(e)}", exc_info=True)
+                
                 return [types.TextContent(type="text", text=results)]
 
             elif name == "hubspot_get_active_contacts":
@@ -612,7 +397,50 @@ async def main(access_token: Optional[str] = None):
                 
                 # Get recent contacts
                 results = hubspot.get_recent_contacts(limit=limit)
+                
+                # Store in FAISS for future reference
+                try:
+                    data = json.loads(results)
+                    metadata_extras = {"limit": limit}
+                    logger.debug(f"Preparing to store {len(data) if isinstance(data, list) else 'single'} contact data item(s) in FAISS")
+                    logger.debug(f"Metadata extras: {metadata_extras}")
+                    store_in_faiss(
+                        faiss_manager=faiss_manager,
+                        data=data,
+                        data_type="contact",
+                        model=embedding_model,
+                        metadata_extras=metadata_extras
+                    )
+                    # Save indexes after successful storage
+                    logger.debug("FAISS storage completed, now saving today's index")
+                    faiss_manager.save_today_index()
+                    logger.debug("Index saving completed")
+                except Exception as e:
+                    logger.error(f"Error storing in FAISS: {str(e)}", exc_info=True)
+                
                 return [types.TextContent(type="text", text=results)]
+                
+            elif name == "hubspot_search_data":
+                # Extract parameters
+                if not arguments or "query" not in arguments:
+                    raise ValueError("Missing query parameter for search")
+                
+                query = arguments["query"]
+                limit = arguments.get("limit", 10)
+                limit = int(limit) if limit is not None else 10
+                
+                try:
+                    results, _ = search_in_faiss(
+                        faiss_manager=faiss_manager,
+                        query=query,
+                        model=embedding_model,
+                        limit=limit
+                    )
+                    
+                    return [types.TextContent(type="text", text=json.dumps(results))]
+                except Exception as e:
+                    logger.error(f"Error searching in FAISS: {str(e)}")
+                    return [types.TextContent(type="text", text=f"Error searching data: {str(e)}")]
 
             else:
                 raise ValueError(f"Unknown tool: {name}")
@@ -621,6 +449,10 @@ async def main(access_token: Optional[str] = None):
             return [types.TextContent(type="text", text=f"HubSpot API error: {str(e)}")]
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error: {str(e)}")]
+
+    # Register shutdown handler to save indexes
+    import atexit
+    atexit.register(faiss_manager.save_today_index)
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         logger.info("Server running with stdio transport")
