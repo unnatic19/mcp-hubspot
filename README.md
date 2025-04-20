@@ -4,7 +4,7 @@
 
 ## Overview
 
-A Model Context Protocol (MCP) server that enables AI assistants to interact with HubSpot CRM data. This server bridges AI models with your HubSpot account, providing direct access to contacts, companies, and engagement data. Built-in vector storage and caching mechanisms help overcome HubSpot API rate limitations while improving response times.
+A Model Context Protocol (MCP) server that enables AI assistants to interact with HubSpot CRM data. This server bridges AI models with your HubSpot account, providing direct access to contacts, companies, and engagement data. Built-in vector storage and caching mechanisms help overcome HubSpot API limitations while improving response times.
 
 Our implementation prioritizes the most frequently used, high-value HubSpot operations with robust error handling and API stability. Each component is optimized for AI-friendly interactions, ensuring reliable performance even during complex, multi-step CRM workflows.
 
