@@ -1,25 +1,46 @@
-import argparse
+"""HubSpot integration for MCP."""
+
 import asyncio
 import logging
+import os
+from typing import Optional
 from . import server
+from .hubspot_client import HubSpotClient
 
-logging.basicConfig(level=logging.DEBUG)
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
 logger = logging.getLogger('mcp_hubspot')
 
-def main():
-    logger.debug("Starting mcp-server-hubspot main()")
-    parser = argparse.ArgumentParser(description='HubSpot MCP Server')
-    parser.add_argument('--access-token', help='HubSpot access token')
+async def main(access_token: Optional[str] = None):
+    """Run the HubSpot MCP server."""
+    # Set hardcoded storage directory
+    os.environ["HUBSPOT_STORAGE_DIR"] = "/storage"
+    
+    # Call the server main function
+    await server.main(access_token)
+
+def run_main():
+    """Synchronous entry point for the package."""
+    import argparse
+    
+    # Set up command line argument parser for access token only
+    parser = argparse.ArgumentParser(description="Run the HubSpot MCP server")
+    parser.add_argument(
+        "--access-token",
+        help="HubSpot API access token (overrides HUBSPOT_ACCESS_TOKEN environment variable)",
+    )
+    
     args = parser.parse_args()
     
-    logger.debug(f"Access token from args: {args.access_token}")
-    # Run the async main function
-    logger.debug("About to run server.main()")
-    asyncio.run(server.main(args.access_token))
-    logger.debug("Server main() completed")
+    # Run the main function through asyncio
+    asyncio.run(main(access_token=args.access_token))
 
 if __name__ == "__main__":
-    main()
+    run_main()
 
 # Expose important items at package level
-__all__ = ["main", "server"] 
+__all__ = ["main", "run_main", "server", "HubSpotClient"] 
