@@ -2,249 +2,83 @@
 [![Docker Hub](https://img.shields.io/docker/pulls/buryhuang/mcp-hubspot?label=Docker%20Hub)](https://hub.docker.com/r/buryhuang/mcp-hubspot) 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-
 ## Overview
 
-A Model Context Protocol (MCP) server implementation that provides integration with HubSpot CRM. This server enables AI models to interact with HubSpot data and operations through a standardized interface.
+A Model Context Protocol (MCP) server that enables AI assistants to interact with HubSpot CRM data. This server bridges AI models with your HubSpot account, providing direct access to contacts, companies, and engagement data. Built-in vector storage and caching mechanisms help overcome HubSpot API rate limitations while improving response times.
 
-For more information about the Model Context Protocol and how it works, see [Anthropic's MCP documentation](https://www.anthropic.com/news/model-context-protocol).
+Our implementation prioritizes the most frequently used, high-value HubSpot operations with robust error handling and API stability. Each component is optimized for AI-friendly interactions, ensuring reliable performance even during complex, multi-step CRM workflows.
 
-<a href="https://glama.ai/mcp/servers/vpoifk4jai"><img width="380" height="200" src="https://glama.ai/mcp/servers/vpoifk4jai/badge" alt="HubSpot Server MCP server" /></a>
+## Why MCP-HubSpot?
 
-## Components
+- **Direct CRM Access**: Connect Claude and other AI assistants to your HubSpot data without intermediary steps
+- **Context Retention**: Vector storage with FAISS enables semantic search across previous interactions
+- **Zero Configuration**: Simple Docker deployment with minimal setup
 
-### Resources
+## Example Prompts
 
-No resources are implemented. At the end of the day, tools are all we need.
+```
+Create HubSpot contacts and companies from this LinkedIn profile:
+[Paste LinkedIn profile text]
+```
 
+```
+What's happening lately with my pipeline?
+```
 
-### Example Prompts
+## Available Tools
 
-- Create Hubspot contacts by copying from LinkedIn profile webpage: 
-    ```
-    Create HubSpot contacts and companies from following:
+The server offers tools for HubSpot management and data retrieval:
 
-    John Doe
-    Software Engineer at Tech Corp
-    San Francisco Bay Area • 500+ connections
-    
-    Experience
-    Tech Corp
-    Software Engineer
-    Jan 2020 - Present · 4 yrs
-    San Francisco, California
-    
-    Previous Company Inc.
-    Senior Developer
-    2018 - 2020 · 2 yrs
-    
-    Education
-    University of California, Berkeley
-    Computer Science, BS
-    2014 - 2018
-    ```
+| Tool | Purpose |
+|------|---------|
+| `hubspot_create_contact` | Create contacts with duplicate prevention |
+| `hubspot_create_company` | Create companies with duplicate prevention |
+| `hubspot_get_company_activity` | Retrieve activity for specific companies |
+| `hubspot_get_recent_engagements` | Get recent engagement data across contacts/companies |
+| `hubspot_get_active_companies` | Retrieve most recently active companies |
+| `hubspot_get_active_contacts` | Retrieve most recently active contacts |
+| `hubspot_search_data` | Semantic search across previously retrieved HubSpot data |
 
-- Get latest activities for your company:
-    ```
-    What's happening latestly with my pipeline?
-    ```
+## Performance Features
 
-
-
-### Tools
-
-The server offers several tools for managing HubSpot objects:
-
-#### Contact Management Tools
-* `hubspot_create_contact`
-  * Create a new contact in HubSpot (checks for duplicates before creation)
-  * Input:
-    * `firstname` (string): Contact's first name
-    * `lastname` (string): Contact's last name
-    * `email` (string, optional): Contact's email address
-    * `properties` (dict, optional): Additional contact properties
-      * Example: `{"phone": "123456789", "company": "HubSpot"}`
-  * Behavior:
-    * Checks for existing contacts with the same first name and last name
-    * If `company` is provided in properties, also checks for matches with the same company
-    * Returns existing contact details if a match is found
-    * Creates new contact only if no match is found
-
-#### Company Management Tools
-* `hubspot_create_company`
-  * Create a new company in HubSpot (checks for duplicates before creation)
-  * Input:
-    * `name` (string): Company name
-    * `properties` (dict, optional): Additional company properties
-      * Example: `{"domain": "example.com", "industry": "Technology"}`
-  * Behavior:
-    * Checks for existing companies with the same name
-    * Returns existing company details if a match is found
-    * Creates new company only if no match is found
-
-* `hubspot_get_company_activity`
-  * Get activity history for a specific company
-  * Input:
-    * `company_id` (string): HubSpot company ID
-  * Returns: Array of activity objects
-
-#### Engagement Tools
-* `hubspot_get_recent_engagements`
-  * Get recent engagement activities across all contacts and companies
-  * Input:
-    * `days` (integer, optional): Number of days to look back (default: 7)
-    * `limit` (integer, optional): Maximum number of engagements to return (default: 50)
-  * Returns: Array of engagement objects with full metadata
-
-* `hubspot_get_recent_companies`
-  * Get most recently active companies from HubSpot
-  * Input:
-    * `limit` (integer, optional): Maximum number of companies to return (default: 10)
-  * Returns: Array of company objects with full metadata
-
-* `hubspot_get_recent_contacts`
-  * Get most recently active contacts from HubSpot
-  * Input:
-    * `limit` (integer, optional): Maximum number of contacts to return (default: 10)
-  * Returns: Array of contact objects with full metadata
-
+- **Vector Storage**: Utilizes FAISS for efficient semantic search and retrieval
+- **Embedding Caching**: Uses SentenceTransformer with automatic caching
+- **Persistent Storage**: Data persists between sessions in configurable storage directory
+- **Multi-platform Support**: Optimized Docker images for various architectures
 
 ## Setup
 
-### Installing via Smithery
-
-To install buryhuang/mcp-hubspot for Claude Desktop automatically via [Smithery](https://smithery.ai/server/buryhuang/mcp-hubspot):
-
-```bash
-npx -y @smithery/cli install buryhuang/mcp-hubspot --client claude
-```
-
 ### Prerequisites
 
-You'll need a HubSpot access token. You can obtain this by:
-1. Creating a private app in your HubSpot account:
-   Follow the [HubSpot Private Apps Guide](https://developers.hubspot.com/docs/guides/apps/private-apps/overview)
-   - Go to your HubSpot account settings
-   - Navigate to Integrations > Private Apps
-   - Click "Create private app"
-   - Fill in the basic information:
-     - Name your app
-     - Add description
-     - Upload logo (optional)
-   - Define required scopes:
-     - tickets
-     - crm.objects.contacts.write
-     - crm.objects.contacts.sensitive.read
-     - crm.objects.companies.sensitive.read
-     - sales-email-read
-     - crm.objects.deals.sensitive.read
-     - crm.objects.companies.write
-     - crm.objects.companies.read
-     - crm.objects.deals.read
-     - crm.objects.deals.write
-     - crm.objects.contacts.read
-   - Review and create the app
-   - Copy the generated access token
+You'll need a HubSpot access token with these scopes:
+- crm.objects.contacts (read/write)
+- crm.objects.companies (read/write)
+- sales-email-read
 
-Note: Keep your access token secure and never commit it to version control.
-
-### Docker Installation
-
-You can either build the image locally or pull it from Docker Hub. The image is built for the Linux platform.
-
-#### Supported Platforms
-- Linux/amd64
-- Linux/arm64
-- Linux/arm/v7
-
-#### Option 1: Pull from Docker Hub
-```bash
-docker pull buryhuang/mcp-hubspot:latest
-```
-
-#### Option 2: Build Locally
-```bash
-docker build -t mcp-hubspot .
-```
-
-Run the container:
-```bash
-docker run \
-  -e HUBSPOT_ACCESS_TOKEN=your_access_token_here \
-  buryhuang/mcp-hubspot:latest
-```
-
-You can also pass the access token directly as a command-line argument:
+### Quick Start
 
 ```bash
-docker run \
-  buryhuang/mcp-hubspot:latest \
-  --access-token your_access_token_here
-```
-
-## Cross-Platform Publishing
-
-To publish the Docker image for multiple platforms, you can use the `docker buildx` command. Follow these steps:
-
-1. **Create a new builder instance** (if you haven't already):
-   ```bash
-   docker buildx create --use
-   ```
-
-2. **Build and push the image for multiple platforms**:
-   ```bash
-   docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t buryhuang/mcp-hubspot:latest --push .
-   ```
-
-3. **Verify the image is available for the specified platforms**:
-   ```bash
-   docker buildx imagetools inspect buryhuang/mcp-hubspot:latest
-   ```
-
-
-## Usage with Claude Desktop
-
-### Installing via Smithery
-
-To install mcp-hubspot for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-hubspot/prod):
-
-```bash
+# Install via Smithery (recommended)
 npx -y @smithery/cli@latest install mcp-hubspot --client claude
+
+# Or pull Docker image directly
+docker run -e HUBSPOT_ACCESS_TOKEN=your_token buryhuang/mcp-hubspot:latest
 ```
 
-### Docker Usage
+### Docker Configuration
+
+For manual configuration in Claude desktop:
+
 ```json
 {
   "mcpServers": {
     "hubspot": {
       "command": "docker",
       "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "HUBSPOT_ACCESS_TOKEN=your_access_token_here",
+        "run", "-i", "--rm",
+        "-e", "HUBSPOT_ACCESS_TOKEN=your_token",
+        "-v", "/path/to/storage:/storage",  # Optional persistent storage
         "buryhuang/mcp-hubspot:latest"
-      ]
-    }
-  }
-}
-```
-
-You can also use the command-line argument:
-
-```json
-{
-  "mcpServers": {
-    "hubspot": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "buryhuang/mcp-hubspot:latest",
-        "--access-token",
-        "your_access_token_here"
       ]
     }
   }
@@ -253,12 +87,10 @@ You can also use the command-line argument:
 
 ## Development
 
-To set up the development environment:
-
 ```bash
 pip install -e .
 ```
 
 ## License
 
-This project is licensed under the MIT License. 
+MIT License 
