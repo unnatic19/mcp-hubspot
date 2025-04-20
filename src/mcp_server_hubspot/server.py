@@ -28,10 +28,6 @@ async def main(access_token: Optional[str] = None):
     storage_dir = os.getenv("HUBSPOT_STORAGE_DIR", "/storage")
     logger.info(f"Using storage directory: {storage_dir}")
     
-    # Create FAISS manager
-    faiss_manager = FaissManager(storage_dir=storage_dir)
-    logger.info("FAISS manager initialized")
-    
     # Load the embedding model at startup
     logger.info("Loading embeddings model")
     # Try to use local model if exists, otherwise download from HuggingFace
@@ -42,7 +38,17 @@ async def main(access_token: Optional[str] = None):
     else:
         logger.info("Local model not found, downloading from HuggingFace")
         embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    logger.info("Embeddings model loaded")
+    
+    # Get the model's embedding dimension
+    embedding_dim = embedding_model.get_sentence_embedding_dimension()
+    logger.info(f"Embeddings model loaded with dimension: {embedding_dim}")
+    
+    # Create FAISS manager with correct embedding dimension
+    faiss_manager = FaissManager(
+        storage_dir=storage_dir,
+        embedding_dimension=embedding_dim
+    )
+    logger.info(f"FAISS manager initialized with dimension {embedding_dim}")
     
     # Initialize HubSpot client
     hubspot = HubSpotClient(access_token)
@@ -297,17 +303,22 @@ async def main(access_token: Optional[str] = None):
                 # Store in FAISS for future reference
                 try:
                     data = json.loads(results)
+                    metadata_extras = {"company_id": arguments["company_id"]}
+                    logger.debug(f"Preparing to store {len(data) if isinstance(data, list) else 'single'} company_activity data item(s) in FAISS")
+                    logger.debug(f"Metadata extras: {metadata_extras}")
                     store_in_faiss(
                         faiss_manager=faiss_manager,
                         data=data,
                         data_type="company_activity",
                         model=embedding_model,
-                        metadata_extras={"company_id": arguments["company_id"]}
+                        metadata_extras=metadata_extras
                     )
                     # Save indexes after successful storage
+                    logger.debug("FAISS storage completed, now saving today's index")
                     faiss_manager.save_today_index()
+                    logger.debug("Index saving completed")
                 except Exception as e:
-                    logger.error(f"Error storing in FAISS: {str(e)}")
+                    logger.error(f"Error storing in FAISS: {str(e)}", exc_info=True)
                 
                 return [types.TextContent(type="text", text=results)]
                 
@@ -326,17 +337,22 @@ async def main(access_token: Optional[str] = None):
                 # Store in FAISS for future reference
                 try:
                     data = json.loads(results)
+                    metadata_extras = {"days": days, "limit": limit}
+                    logger.debug(f"Preparing to store {len(data) if isinstance(data, list) else 'single'} engagement data item(s) in FAISS")
+                    logger.debug(f"Metadata extras: {metadata_extras}")
                     store_in_faiss(
                         faiss_manager=faiss_manager,
                         data=data,
                         data_type="engagement",
                         model=embedding_model,
-                        metadata_extras={"days": days, "limit": limit}
+                        metadata_extras=metadata_extras
                     )
                     # Save indexes after successful storage
+                    logger.debug("FAISS storage completed, now saving today's index")
                     faiss_manager.save_today_index()
+                    logger.debug("Index saving completed")
                 except Exception as e:
-                    logger.error(f"Error storing in FAISS: {str(e)}")
+                    logger.error(f"Error storing in FAISS: {str(e)}", exc_info=True)
                 
                 return [types.TextContent(type="text", text=results)]
 
@@ -353,17 +369,22 @@ async def main(access_token: Optional[str] = None):
                 # Store in FAISS for future reference
                 try:
                     data = json.loads(results)
+                    metadata_extras = {"limit": limit}
+                    logger.debug(f"Preparing to store {len(data) if isinstance(data, list) else 'single'} company data item(s) in FAISS")
+                    logger.debug(f"Metadata extras: {metadata_extras}")
                     store_in_faiss(
                         faiss_manager=faiss_manager,
                         data=data,
                         data_type="company",
                         model=embedding_model,
-                        metadata_extras={"limit": limit}
+                        metadata_extras=metadata_extras
                     )
                     # Save indexes after successful storage
+                    logger.debug("FAISS storage completed, now saving today's index")
                     faiss_manager.save_today_index()
+                    logger.debug("Index saving completed")
                 except Exception as e:
-                    logger.error(f"Error storing in FAISS: {str(e)}")
+                    logger.error(f"Error storing in FAISS: {str(e)}", exc_info=True)
                 
                 return [types.TextContent(type="text", text=results)]
 
@@ -380,17 +401,22 @@ async def main(access_token: Optional[str] = None):
                 # Store in FAISS for future reference
                 try:
                     data = json.loads(results)
+                    metadata_extras = {"limit": limit}
+                    logger.debug(f"Preparing to store {len(data) if isinstance(data, list) else 'single'} contact data item(s) in FAISS")
+                    logger.debug(f"Metadata extras: {metadata_extras}")
                     store_in_faiss(
                         faiss_manager=faiss_manager,
                         data=data,
                         data_type="contact",
                         model=embedding_model,
-                        metadata_extras={"limit": limit}
+                        metadata_extras=metadata_extras
                     )
                     # Save indexes after successful storage
+                    logger.debug("FAISS storage completed, now saving today's index")
                     faiss_manager.save_today_index()
+                    logger.debug("Index saving completed")
                 except Exception as e:
-                    logger.error(f"Error storing in FAISS: {str(e)}")
+                    logger.error(f"Error storing in FAISS: {str(e)}", exc_info=True)
                 
                 return [types.TextContent(type="text", text=results)]
                 

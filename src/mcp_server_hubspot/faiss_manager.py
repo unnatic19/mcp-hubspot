@@ -12,15 +12,17 @@ logger = logging.getLogger("mcp_hubspot_faiss_manager")
 class FaissManager:
     """Manager for FAISS indexes that handles rolling storage by day."""
     
-    def __init__(self, storage_dir: str = "/storage", max_days: int = 7):
+    def __init__(self, storage_dir: str = "/storage", max_days: int = 7, embedding_dimension: int = 384):
         """Initialize the FAISS manager.
         
         Args:
             storage_dir: Directory to store FAISS index files
             max_days: Maximum number of days to keep in storage
+            embedding_dimension: Dimension of the embedding vectors (default: 384 for all-MiniLM-L6-v2)
         """
         self.storage_dir = storage_dir
         self.max_days = max_days
+        self.embedding_dimension = embedding_dimension
         self.indexes: Dict[str, faiss.Index] = {}
         self.metadata: Dict[str, List[Dict[str, Any]]] = {}
         
@@ -135,15 +137,16 @@ class FaissManager:
         Args:
             date_str: Date string in YYYY-MM-DD format
         """
-        # Create a new index with 768 dimensions (standard for many embeddings)
-        dimension = 768
+        # Create a new index using the configured embedding dimension
+        dimension = self.embedding_dimension
+        logger.debug(f"Creating new index with dimension {dimension}")
         index = faiss.IndexFlatL2(dimension)
         
         # Store in memory
         self.indexes[date_str] = index
         self.metadata[date_str] = []
         
-        logger.info(f"Created new empty index for {date_str}")
+        logger.info(f"Created new empty index for {date_str} with dimension {dimension}")
     
     def _remove_index(self, date_str: str) -> None:
         """Remove an index and its metadata from disk and memory.
@@ -176,9 +179,13 @@ class FaissManager:
     def save_today_index(self) -> None:
         """Save only today's index and metadata to disk."""
         today = self._get_today_date_str()
+        logger.debug(f"Attempting to save today's index ({today})")
         if today in self.indexes:
+            index_size = self.indexes[today].ntotal
+            metadata_count = len(self.metadata[today])
+            logger.debug(f"Today's index contains {index_size} vectors and {metadata_count} metadata items")
             self._save_index(today)
-            logger.info(f"Saved today's index ({today})")
+            logger.info(f"Saved today's index ({today}) with {index_size} vectors")
         else:
             logger.warning(f"Today's index ({today}) does not exist")
     
@@ -196,16 +203,20 @@ class FaissManager:
         metadata_path = self._get_metadata_path(date_str)
         
         try:
+            logger.debug(f"Saving FAISS index for {date_str} to {index_path}")
             # Save FAISS index
             faiss.write_index(self.indexes[date_str], index_path)
+            logger.debug(f"FAISS index saved successfully")
             
+            logger.debug(f"Saving metadata for {date_str} to {metadata_path} ({len(self.metadata[date_str])} items)")
             # Save metadata
             with open(metadata_path, 'w') as f:
                 json.dump(self.metadata[date_str], f)
+            logger.debug(f"Metadata saved successfully")
             
             logger.info(f"Saved index for {date_str} with {self.indexes[date_str].ntotal} vectors")
         except Exception as e:
-            logger.error(f"Failed to save index for {date_str}: {str(e)}")
+            logger.error(f"Failed to save index for {date_str}: {str(e)}", exc_info=True)
     
     def add_data(self, vectors: np.ndarray, metadata_list: List[Dict[str, Any]]) -> None:
         """Add data to today's index.
@@ -215,21 +226,30 @@ class FaissManager:
             metadata_list: List of metadata dictionaries
         """
         today = self._get_today_date_str()
+        logger.debug(f"Adding data to index for {today}")
+        logger.debug(f"Vector data shape: {vectors.shape}, metadata list length: {len(metadata_list)}")
         
         # Create today's index if it doesn't exist
         if today not in self.indexes:
+            logger.debug(f"Today's index ({today}) does not exist, creating new index")
             self._create_new_index(today)
         
         # Add vectors to the index
+        logger.debug(f"Current index size before addition: {self.indexes[today].ntotal}")
         self.indexes[today].add(vectors)
+        logger.debug(f"Current index size after addition: {self.indexes[today].ntotal}")
         
         # Add metadata
+        current_metadata_count = len(self.metadata[today])
+        logger.debug(f"Current metadata count before addition: {current_metadata_count}")
         self.metadata[today].extend(metadata_list)
+        logger.debug(f"Current metadata count after addition: {len(self.metadata[today])}")
         
+        logger.debug(f"Saving index after data addition")
         # Save the updated index
         self._save_index(today)
         
-        logger.info(f"Added {len(vectors)} vectors to index for {today}")
+        logger.info(f"Added {len(vectors)} vectors to index for {today}, new total: {self.indexes[today].ntotal}")
     
     def search(self, query_vector: np.ndarray, k: int = 10) -> Tuple[List[Dict[str, Any]], List[float]]:
         """Search across all indexes for the most similar vectors.

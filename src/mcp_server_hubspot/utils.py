@@ -39,14 +39,20 @@ def store_in_faiss(
         metadata_extras: Additional metadata to store with each item
     """
     try:
+        logger.debug(f"Starting store_in_faiss for {data_type} with {len(data) if data else 0} items")
+        logger.debug(f"Metadata extras: {metadata_extras}")
+        
         if not data:
             logger.info(f"No {data_type} data to store in FAISS")
             return
             
         # Generate embeddings
+        logger.debug(f"Generating embeddings for {len(data)} {data_type} items")
         embeddings = generate_embeddings(data, model)
+        logger.debug(f"Generated embeddings with shape: {embeddings.shape}")
         
         # Create metadata list
+        logger.debug(f"Creating metadata for {len(data)} {data_type} items")
         metadata_list = []
         for item in data:
             metadata = {
@@ -58,10 +64,11 @@ def store_in_faiss(
             metadata_list.append(metadata)
         
         # Store in FAISS
+        logger.debug(f"Adding {len(embeddings)} vectors to FAISS index")
         faiss_manager.add_data(vectors=embeddings, metadata_list=metadata_list)
-        logger.info(f"Stored {len(data)} {data_type} items in FAISS")
+        logger.info(f"Successfully stored {len(data)} {data_type} items in FAISS")
     except Exception as e:
-        logger.error(f"Error storing {data_type} in FAISS: {str(e)}")
+        logger.error(f"Error storing {data_type} in FAISS: {str(e)}", exc_info=True)
 
 def search_in_faiss(
     faiss_manager: FaissManager, 
