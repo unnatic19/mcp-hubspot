@@ -99,8 +99,8 @@ docker build -t mcp-hubspot .
 For multi-platform builds:
 
 ```bash
-docker buildx create --name mybuilder --use
-docker buildx build --platform linux/amd64,linux/arm64 -t yourusername/mcp-hubspot:latest --push .
+docker buildx create --use
+docker buildx build --platform linux/amd64,linux/arm64 -t buryhuang/mcp-hubspot:latest --push .
 ```
 
 ## Development
