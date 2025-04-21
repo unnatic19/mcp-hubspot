@@ -108,17 +108,6 @@ async def main(access_token: Optional[str] = None):
                 },
             ),
             types.Tool(
-                name="hubspot_get_recent_engagements",
-                description="Get recent engagement activities across all contacts and companies",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "days": {"type": "integer", "description": "Number of days to look back (default: 7)"},
-                        "limit": {"type": "integer", "description": "Maximum number of engagements to return (default: 50)"}
-                    },
-                },
-            ),
-            types.Tool(
                 name="hubspot_get_active_companies",
                 description="Get most recently active companies from HubSpot",
                 inputSchema={
@@ -149,6 +138,18 @@ async def main(access_token: Optional[str] = None):
                         "limit": {"type": "integer", "description": "Maximum number of results to return (default: 10)"}
                     },
                     "required": ["query"]
+                },
+            ),
+            types.Tool(
+                name="hubspot_get_recent_conversations",
+                description="Get recent conversation threads from HubSpot with their messages",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "description": "Maximum number of threads to return (default: 10)"},
+                        "after": {"type": "string", "description": "Pagination token"},
+                        "refresh_cache": {"type": "boolean", "description": "Whether to refresh the threads cache (default: false)"}
+                    },
                 },
             ),
         ]
@@ -322,39 +323,60 @@ async def main(access_token: Optional[str] = None):
                 
                 return [types.TextContent(type="text", text=results)]
                 
-            elif name == "hubspot_get_recent_engagements":
+            elif name == "hubspot_get_recent_conversations":
                 # Extract parameters with defaults if not provided
-                days = arguments.get("days", 7) if arguments else 7
-                limit = arguments.get("limit", 50) if arguments else 50
+                limit = arguments.get("limit", 10) if arguments else 10
+                after = arguments.get("after") if arguments else None
+                refresh_cache = arguments.get("refresh_cache", False) if arguments else False
                 
-                # Ensure days and limit are integers
-                days = int(days) if days is not None else 7
-                limit = int(limit) if limit is not None else 50
+                # Ensure limit is an integer
+                limit = int(limit) if limit is not None else 10
                 
-                # Get recent engagements
-                results = hubspot.get_recent_engagements(days=days, limit=limit)
+                # Get recent conversations with pagination
+                logger.debug(f"Getting recent conversations with limit={limit}, after={after}, refresh_cache={refresh_cache}")
+                results = hubspot.get_recent_conversations(limit=limit, after=after, refresh_cache=refresh_cache)
                 
                 # Store in FAISS for future reference
                 try:
-                    data = json.loads(results)
-                    metadata_extras = {"days": days, "limit": limit}
-                    logger.debug(f"Preparing to store {len(data) if isinstance(data, list) else 'single'} engagement data item(s) in FAISS")
-                    logger.debug(f"Metadata extras: {metadata_extras}")
-                    store_in_faiss(
-                        faiss_manager=faiss_manager,
-                        data=data,
-                        data_type="engagement",
-                        model=embedding_model,
-                        metadata_extras=metadata_extras
-                    )
-                    # Save indexes after successful storage
-                    logger.debug("FAISS storage completed, now saving today's index")
-                    faiss_manager.save_today_index()
-                    logger.debug("Index saving completed")
+                    data = results.get("results", [])
+                    if data:
+                        # Store each thread individually in FAISS
+                        logger.debug(f"Preparing to store {len(data)} conversation threads in FAISS individually")
+                        for i, thread in enumerate(data):
+                            thread_metadata = {
+                                "thread_id": thread.get("id", f"unknown_{i}"),
+                                "limit": limit,
+                                "after": after
+                            }
+                            logger.debug(f"Storing thread {i+1}/{len(data)} with ID {thread_metadata['thread_id']}")
+                            
+                            # Store single thread as a list with one item to maintain format compatibility
+                            store_in_faiss(
+                                faiss_manager=faiss_manager,
+                                data=[thread],  # Store as single-item list
+                                data_type="conversation_thread",
+                                model=embedding_model,
+                                metadata_extras=thread_metadata
+                            )
+                        
+                        # Save indexes after successful storage
+                        logger.debug(f"All {len(data)} threads stored in FAISS, now saving today's index")
+                        faiss_manager.save_today_index()
+                        logger.debug("Index saving completed")
                 except Exception as e:
-                    logger.error(f"Error storing in FAISS: {str(e)}", exc_info=True)
+                    logger.error(f"Error storing conversations in FAISS: {str(e)}", exc_info=True)
                 
-                return [types.TextContent(type="text", text=results)]
+                # Truncate message text for API response (while preserving full text in FAISS)
+                truncated_results = results.copy()
+                for thread in truncated_results.get("results", []):
+                    for message in thread.get("messages", []):
+                        if "text" in message:
+                            message["text"] = message["text"][:200] if message["text"] else ""
+                        if "rich_text" in message:
+                            message["rich_text"] = message["rich_text"][:200] if message["rich_text"] else ""
+                
+                # Return truncated results as JSON
+                return [types.TextContent(type="text", text=json.dumps(truncated_results))]
 
             elif name == "hubspot_get_active_companies":
                 # Extract parameters with defaults if not provided
