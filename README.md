@@ -86,6 +86,23 @@ For manual configuration in Claude desktop:
 }
 ```
 
+### Building Docker Image
+
+To build the Docker image locally:
+
+```bash
+git clone https://github.com/buryhuang/mcp-hubspot.git
+cd mcp-hubspot
+docker build -t mcp-hubspot .
+```
+
+For multi-platform builds:
+
+```bash
+docker buildx create --name mybuilder --use
+docker buildx build --platform linux/amd64,linux/arm64 -t yourusername/mcp-hubspot:latest --push .
+```
+
 ## Development
 
 ```bash
