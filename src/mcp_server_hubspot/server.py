@@ -2,6 +2,7 @@
 MCP server module for HubSpot integration.
 Provides tools for interacting with HubSpot API through an MCP server interface.
 """
+import asyncio
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -9,8 +10,9 @@ import json
 from dotenv import load_dotenv
 
 from mcp.server.models import InitializationOptions
+from mcp.server.lowlevel import NotificationOptions
 import mcp.types as types
-from mcp.server import NotificationOptions, Server
+from mcp.server import Server
 import mcp.server.stdio
 from pydantic import AnyUrl
 
@@ -26,6 +28,8 @@ from .handlers.ticket_handler import TicketHandler
 from .handlers.search_handler import SearchHandler
 
 logger = logging.getLogger('mcp_hubspot_server')
+
+load_dotenv()
 
 async def main(access_token: Optional[str] = None):
     """Run the HubSpot MCP server."""
@@ -52,8 +56,23 @@ async def main(access_token: Optional[str] = None):
         search_handler
     )
     
-    # Run server
-    await server.run()
+    # Based on MCP implementation, use stdio_server as a context manager that yields streams
+    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+        # Log server start
+        logger.info("Server running with stdio transport")
+        
+        # Create initialization options with capabilities
+        initialization_options = InitializationOptions(
+            server_name="hubspot-manager",
+            server_version="0.2.0",
+            capabilities=server.get_capabilities(
+                notification_options=NotificationOptions(),
+                experimental_capabilities={}
+            )
+        )
+        
+        # Run the server with the provided streams and options
+        await server.run(read_stream, write_stream, initialization_options)
 
 def initialize_embedding_model() -> SentenceTransformer:
     """Initialize and return the embedding model."""
@@ -74,7 +93,7 @@ def initialize_embedding_model() -> SentenceTransformer:
 
 def initialize_faiss_manager(embedding_model: SentenceTransformer) -> FaissManager:
     """Initialize and return the FAISS manager."""
-    storage_dir = os.getenv("HUBSPOT_STORAGE_DIR", "/storage")
+    storage_dir = os.getenv("HUBSPOT_STORAGE_DIR_LOCAL", "/storage")
     logger.info(f"Using storage directory: {storage_dir}")
     
     embedding_dim = embedding_model.get_sentence_embedding_dimension()
