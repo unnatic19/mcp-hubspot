@@ -33,7 +33,7 @@ class TicketClient:
     @handle_hubspot_errors
     def get_tickets(
         self, 
-        criteria: Literal["default", "closed"] = "default",
+        criteria: Literal["default", "Closed"] = "default",
         limit: int = 50,
         max_retries: int = 3,
         retry_delay: float = 1.0
@@ -43,7 +43,7 @@ class TicketClient:
         Args:
             criteria: Selection criteria for tickets
                 - "default": Tickets with "close date" or "last close date" > 1 day ago
-                - "closed": Tickets with status equals "Closed"
+                - "Closed": Tickets with status equals "Closed"
             limit: Maximum number of tickets to return (default: 50)
             max_retries: Maximum number of retry attempts for rate limiting (default: 3)
             retry_delay: Initial delay between retries in seconds (default: 1.0)
@@ -64,7 +64,7 @@ class TicketClient:
     
     def _create_filter_groups_for_criteria(
         self, 
-        criteria: Literal["default", "closed"]
+        criteria: Literal["default", "Closed"]
     ) -> List[Dict[str, Any]]:
         """Create filter groups based on ticket selection criteria.
         
@@ -76,10 +76,10 @@ class TicketClient:
         """
         if criteria == "default":
             return self._create_default_criteria_filters()
-        elif criteria == "closed":
+        elif criteria == "Closed":
             return self._create_closed_criteria_filters()
         else:
-            raise ValueError(f"Invalid criteria: {criteria}. Must be 'default' or 'closed'")
+            raise ValueError(f"Invalid criteria: {criteria}. Must be 'default' or 'Closed'")
     
     def _create_default_criteria_filters(self) -> List[Dict[str, Any]]:
         """Create filter groups for the default criteria.
@@ -123,12 +123,23 @@ class TicketClient:
             List of filter groups
         """
         return [
+            # Primary approach: using the pipeline stage ID
             {
                 "filters": [
                     {
                         "propertyName": "hs_pipeline_stage",
                         "operator": "EQ",
-                        "value": "closed"
+                        "value": "4"  # Using the stage ID from the pipeline data
+                    }
+                ]
+            },
+            # Alternative approach: using the properly capitalized stage name
+            {
+                "filters": [
+                    {
+                        "propertyName": "hs_pipeline_stage",
+                        "operator": "EQ",
+                        "value": "Closed"  # Using correct capitalization
                     }
                 ]
             }
@@ -160,6 +171,8 @@ class TicketClient:
                 "content", 
                 "hs_pipeline", 
                 "hs_pipeline_stage", 
+                "hs_ticket_status",
+                "status",     
                 "hs_ticket_priority", 
                 "createdate", 
                 "closedate", 
@@ -188,14 +201,25 @@ class TicketClient:
         
         while True:
             try:
+                # Log filter groups for debugging
+                logger.debug(f"Executing ticket search with filter groups: {json.dumps(search_request.filter_groups)}")
+                
                 # Execute the search
                 search_response = self.client.crm.tickets.search_api.do_search(
                     public_object_search_request=search_request
                 )
                 
+                # Log raw response
+                logger.debug(f"Search response total results: {search_response.total}")
+                
                 # Convert the response to a dictionary
                 tickets_dict = [ticket.to_dict() for ticket in search_response.results]
                 converted_tickets = convert_datetime_fields(tickets_dict)
+                
+                # Log ticket data if available
+                if tickets_dict:
+                    logger.debug(f"First ticket pipeline stage: {tickets_dict[0].get('properties', {}).get('hs_pipeline_stage')}")
+                    logger.debug(f"First ticket status: {tickets_dict[0].get('properties', {}).get('hs_ticket_status')}")
                 
                 # Get pagination information
                 next_after = None

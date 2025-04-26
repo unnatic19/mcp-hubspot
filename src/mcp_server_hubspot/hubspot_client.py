@@ -129,7 +129,7 @@ class HubSpotClient:
     
     def get_tickets(
         self, 
-        criteria: Literal["default", "closed"] = "default", 
+        criteria: Literal["default", "Closed"] = "default", 
         limit: int = 50, 
         max_retries: int = 3, 
         retry_delay: float = 1.0
@@ -139,7 +139,7 @@ class HubSpotClient:
         Args:
             criteria: Selection criteria for tickets
                 - "default": Tickets with "close date" or "last close date" > 1 day ago
-                - "closed": Tickets with status equals "Closed"
+                - "Closed": Tickets with status equals "Closed"
             limit: Maximum number of tickets to return (default: 50)
             max_retries: Maximum number of retry attempts for rate limiting (default: 3)
             retry_delay: Initial delay between retries in seconds (default: 1.0)

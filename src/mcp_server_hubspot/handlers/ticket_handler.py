@@ -32,7 +32,7 @@ class TicketHandler(BaseHandler):
             "properties": {
                 "criteria": {
                     "type": "string", 
-                    "enum": ["default", "closed"],
+                    "enum": ["default", "Closed"],
                     "description": "Selection criteria for tickets: 'default' (tickets with close date or last modified date > 1 day ago) or 'closed' (tickets with status equals 'Closed')"
                 },
                 "limit": {"type": "integer", "description": "Maximum number of tickets to return (default: 50)"},
@@ -76,9 +76,9 @@ class TicketHandler(BaseHandler):
         retry_delay = float(retry_delay) if retry_delay is not None else 1.0
         
         # Validate criteria
-        if criteria not in ["default", "closed"]:
+        if criteria not in ["default", "Closed"]:
             return self.create_text_response({
-                "error": f"Invalid criteria: {criteria}. Must be 'default' or 'closed'",
+                "error": f"Invalid criteria: {criteria}. Must be 'default' or 'Closed'",
                 "results": [],
                 "pagination": {"next": {"after": None}},
                 "total": 0
