@@ -144,15 +144,36 @@ class TicketHandler(BaseHandler):
         
         ticket_id = arguments["ticket_id"]
         
-        # Get conversation threads for the ticket
-        self.logger.debug(f"Getting conversation threads for ticket {ticket_id}")
-        results = self.hubspot.get_ticket_conversation_threads(ticket_id=ticket_id)
-        
-        # Store in FAISS for future reference
-        self._store_ticket_threads_in_faiss(results, ticket_id)
-        
-        # Return results as JSON
-        return self.create_text_response(results)
+        try:
+            # Get conversation threads for the ticket
+            self.logger.debug(f"Getting conversation threads for ticket {ticket_id}")
+            results = self.hubspot.get_ticket_conversation_threads(ticket_id=ticket_id)
+            
+            # Check if results is a string (error message)
+            if isinstance(results, str):
+                self.logger.error(f"Error retrieving conversation threads: {results}")
+                return self.create_text_response({
+                    "error": results,
+                    "ticket_id": ticket_id,
+                    "threads": [],
+                    "total_threads": 0,
+                    "total_messages": 0
+                })
+            
+            # Store in FAISS for future reference
+            self._store_ticket_threads_in_faiss(results, ticket_id)
+            
+            # Return results as JSON
+            return self.create_text_response(results)
+        except Exception as e:
+            self.logger.error(f"Exception in get_ticket_conversation_threads: {str(e)}", exc_info=True)
+            return self.create_text_response({
+                "error": str(e),
+                "ticket_id": ticket_id,
+                "threads": [],
+                "total_threads": 0,
+                "total_messages": 0
+            })
     
     def _store_ticket_threads_in_faiss(
         self, 

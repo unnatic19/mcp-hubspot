@@ -264,28 +264,34 @@ class TicketClient:
         """
         logger.debug(f"Fetching conversation threads for ticket {ticket_id}")
         
-        # Step 1: Use Associations API to retrieve conversation threads associated with the ticket
-        associated_conversations = self._get_associated_conversations(ticket_id)
-        thread_ids = self._extract_thread_ids(associated_conversations)
-        
-        logger.debug(f"Found {len(thread_ids)} conversation threads associated with ticket {ticket_id}")
-        
-        if not thread_ids:
-            logger.info(f"No conversation threads found for ticket {ticket_id}")
+        try:
+            # Step 1: Use Associations API to retrieve conversation threads associated with the ticket
+            associated_conversations = self._get_associated_conversations(ticket_id)
+            
+            # Step 2: Extract thread IDs from the associated conversations
+            thread_ids = self._extract_thread_ids(associated_conversations)
+            
+            logger.debug(f"Found {len(thread_ids)} conversation threads associated with ticket {ticket_id}")
+            
+            if not thread_ids:
+                logger.info(f"No conversation threads found for ticket {ticket_id}")
+                return self._create_empty_ticket_threads_response(ticket_id)
+            
+            # Step 3: Retrieve all messages for each thread
+            threads, total_messages = self._get_thread_messages(thread_ids)
+            
+            # Convert datetime fields
+            converted_threads = convert_datetime_fields(threads)
+            
+            return {
+                "ticket_id": ticket_id,
+                "threads": converted_threads,
+                "total_threads": len(converted_threads),
+                "total_messages": total_messages
+            }
+        except Exception as e:
+            logger.error(f"Error retrieving conversation threads for ticket {ticket_id}: {str(e)}", exc_info=True)
             return self._create_empty_ticket_threads_response(ticket_id)
-        
-        # Step 2: Retrieve all messages for each thread
-        threads, total_messages = self._get_thread_messages(thread_ids)
-        
-        # Convert datetime fields
-        converted_threads = convert_datetime_fields(threads)
-        
-        return {
-            "ticket_id": ticket_id,
-            "threads": converted_threads,
-            "total_threads": len(converted_threads),
-            "total_messages": total_messages
-        }
     
     def _get_associated_conversations(self, ticket_id: str) -> Dict[str, Any]:
         """Get conversation threads associated with a ticket.
@@ -316,7 +322,20 @@ class TicketClient:
         Returns:
             List of thread IDs
         """
-        return [conversation['id'] for conversation in associated_conversations.get('results', [])]
+        thread_ids = []
+        
+        for conversation in associated_conversations.get('results', []):
+            # Check if the conversation has a toObjectId field (this is the conversation ID)
+            if 'toObjectId' in conversation:
+                thread_ids.append(str(conversation['toObjectId']))
+            elif 'id' in conversation:
+                # Fallback to id if it exists
+                thread_ids.append(str(conversation['id']))
+            else:
+                # Log warning for debugging
+                logger.warning(f"No 'id' or 'toObjectId' field in conversation: {json.dumps(conversation)}")
+        
+        return thread_ids
     
     def _create_empty_ticket_threads_response(self, ticket_id: str) -> Dict[str, Any]:
         """Create an empty ticket threads response.

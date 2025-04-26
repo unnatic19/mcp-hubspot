@@ -278,7 +278,7 @@ def main():
             if "error" in lowercase_dict:
                 print(f"Lowercase method: Error - {lowercase_dict['error']}")
             else:
-                print(f"Lowercase method: Unexpected format")
+                print(f"Lowercase method: {len(lowercase_dict.get('results', []))} tickets")
         except json.JSONDecodeError:
             print(f"Lowercase method: Error - {lowercase_results}")
     elif isinstance(lowercase_results, dict) and "error" in lowercase_results:
