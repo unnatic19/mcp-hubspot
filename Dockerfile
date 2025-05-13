@@ -1,22 +1,35 @@
-# Use Python base image
-FROM python:3.10-slim-bookworm
+# ───────────────────────────────────────────────────────────────
+#  HubSpot MCP + SuperGateway   (HTTP/SSE on port 8080)
+# ───────────────────────────────────────────────────────────────
 
-# Install the project into `/app`
+FROM python:3.10-slim-bookworm   # keep your chosen base
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# Copy the entire project
+# copy code first so that requirements caching still works
 COPY . /app
 
-# Install the package
-RUN pip install --no-cache-dir .
+# install the package *plus* supergateway
+RUN pip install --no-cache-dir . \
+    && pip install --no-cache-dir mcp-supergateway==0.5.2
 
-# Create models directory
-RUN mkdir -p /app/models
+# download and cache the SBERT model (unchanged)
+RUN mkdir -p /app/models && \
+    python - <<'PY'
+from sentence_transformers import SentenceTransformer
+m = SentenceTransformer("all-MiniLM-L6-v2")
+m.save("/app/models/all-MiniLM-L6-v2")
+PY
 
-# Pre-download models
-RUN python -c "from sentence_transformers import SentenceTransformer; \
-    model = SentenceTransformer('all-MiniLM-L6-v2'); \
-    model.save('/app/models/all-MiniLM-L6-v2')"
+# health-check path for Railway
+EXPOSE 8080
 
-# Run the server
-ENTRYPOINT ["mcp-server-hubspot"] 
+# ------------- ENTRYPOINT -------------
+# SuperGateway starts the stdio server and exposes HTTP/SSE
+ENTRYPOINT ["/bin/sh", "-c", "\
+  supergateway \
+    --stdio-command 'mcp-server-hubspot --access-token $HUBSPOT_ACCESS_TOKEN' \
+    --listen-host 0.0.0.0 \
+    --listen-port ${PORT:-8080} \
+"]
